@@ -151,17 +151,19 @@ export async function GET() {
         );
         return {
           ...playlist,
-          tracks: response.items.map((item: any) => ({
-            name: item.track.name,
-            artist: item.track.artists
-              .map((artist: any) => artist.name)
-              .join(", "),
-            album: item.track.album.name,
-            image: item.track.album.images[0].url,
-            url: item.track.external_urls.spotify,
-            uri: item.track.uri,
-            duration: item.track.duration_ms,
-          })),
+          tracks: response.items
+            .filter((item: any) => item.track !== null)
+            .map((item: any) => ({
+              name: item.track.name,
+              artist: item.track.artists
+                .map((artist: any) => artist.name)
+                .join(", "),
+              album: item.track.album.name,
+              image: item.track.album.images[0]?.url,
+              url: item.track.external_urls.spotify,
+              uri: item.track.uri,
+              duration: item.track.duration_ms,
+            })),
         };
       })
     );

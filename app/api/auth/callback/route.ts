@@ -45,7 +45,7 @@ export async function GET(request: Request) {
 
     // Store the tokens in cookies
     const response = NextResponse.redirect(
-      new URL("/api/playlists", redirectURI)
+      new URL("/api/get_playlists", redirectURI)
     );
 
     response.cookies.set("spotify_access_token", data.access_token, {
