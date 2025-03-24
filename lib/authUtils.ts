@@ -52,7 +52,11 @@ export const getRefreshToken = async () => {
   // refresh token that has been previously stored
   const refreshToken = cookieStore.get("spotify_refresh_token")?.value;
   if (!refreshToken) {
-    throw new Error("No refresh token found");
+    console.error("No refresh token found");
+    console.log("redirecting to login");
+    return NextResponse.redirect(
+      new URL("/api/auth/login", process.env.BASE_URL!)
+    );
   }
   const url = "https://accounts.spotify.com/api/token";
 
@@ -78,14 +82,9 @@ export const getRefreshToken = async () => {
   const response = await body.json();
   console.log("responsee", response);
 
-  cookieStore.set(
-    "spotify_access_token",
-    JSON.stringify(response.access_token)
-  );
-  if (response.refresh_token) {
-    cookieStore.set(
-      "spotify_refresh_token",
-      JSON.stringify(response.refresh_token)
-    );
-  }
+  return {
+    access_token: response.access_token,
+    refresh_token: response.refresh_token,
+    response: response,
+  };
 };
