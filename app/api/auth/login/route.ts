@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateRandomString } from "@/lib/authUtils";
 
-// log env variables
-console.log(process.env.SPOTIFY_CLIENT_ID);
-console.log(process.env.SPOTIFY_REDIRECT_URI);
+const redirectURI = process.env.BASE_URL! + "/api/auth/callback";
 
 export async function GET() {
   const state = generateRandomString(16);
@@ -14,7 +12,7 @@ export async function GET() {
     response_type: "code",
     client_id: process.env.SPOTIFY_CLIENT_ID!,
     scope: scope,
-    redirect_uri: process.env.SPOTIFY_REDIRECT_URI!,
+    redirect_uri: redirectURI,
     state: state,
     show_dialog: "true",
   });

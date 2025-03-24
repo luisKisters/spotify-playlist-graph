@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 
+const redirectURI = process.env.BASE_URL! + "/api/auth/callback";
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
@@ -30,7 +32,7 @@ export async function GET(request: Request) {
         body: new URLSearchParams({
           grant_type: "authorization_code",
           code,
-          redirect_uri: process.env.SPOTIFY_REDIRECT_URI!,
+          redirect_uri: redirectURI,
         }),
       }
     );
@@ -43,10 +45,7 @@ export async function GET(request: Request) {
 
     // Store the tokens in cookies
     const response = NextResponse.redirect(
-      new URL(
-        "/api/playlists",
-        process.env.SPOTIFY_REDIRECT_URI!.replace("/api/auth/callback", "")
-      )
+      new URL("/api/playlists", redirectURI)
     );
 
     response.cookies.set("spotify_access_token", data.access_token, {
