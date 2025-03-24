@@ -44,24 +44,30 @@ export async function GET(request: Request) {
     }
 
     // Store the tokens in cookies
-    const response = NextResponse.redirect(
-      new URL("/api/get_playlists", redirectURI)
-    );
+    const response = NextResponse.redirect(new URL("/", redirectURI));
 
     response.cookies.set("spotify_access_token", data.access_token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: data.expires_in,
+      // httpOnly: true,
+      // secure: process.env.NODE_ENV === "production",
+      // sameSite: "lax",
+      // maxAge: data.expires_in,
     });
+    console.log(
+      "set access token to: ",
+      response.cookies.get("spotify_access_token")
+    );
 
     if (data.refresh_token) {
       response.cookies.set("spotify_refresh_token", data.refresh_token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        maxAge: 30 * 24 * 60 * 60, // 30 days
+        // httpOnly: true,
+        // secure: process.env.NODE_ENV === "production",
+        // sameSite: "lax",
+        // maxAge: 30 * 24 * 60 * 60, // 30 days
       });
+      console.log(
+        "set refresh token to: ",
+        response.cookies.get("spotify_refresh_token")
+      );
     }
 
     return response;

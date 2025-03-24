@@ -1,13 +1,13 @@
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-export async function GET() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("spotify_access_token")?.value;
+import { NextRequest, NextResponse } from "next/server";
+
+export async function GET(request: NextRequest) {
+  const token = request.nextUrl.searchParams.get("token");
 
   if (!token) {
     console.error("No access token found");
-    return NextResponse.redirect(
-      new URL("/api/auth/login", process.env.BASE_URL!)
+    return NextResponse.json(
+      { error: "No access token found" },
+      { status: 401 }
     );
   }
 
@@ -31,20 +31,6 @@ export async function GET() {
         signal: AbortSignal.timeout(10000), // 10 second timeout
       });
 
-      if (response.status === 401) {
-        const refreshResponse = await fetch("/api/auth/refresh");
-        const refreshData = await refreshResponse.json();
-        const new_access_token = refreshData.access_token;
-        const new_refresh_token = refreshData.refresh_token;
-
-        cookieStore.set("spotify_access_token", new_access_token);
-        cookieStore.set("spotify_refresh_token", new_refresh_token);
-
-        // Retry the request with the new token
-        return spotify_request(url, new_access_token);
-      }
-
-      // Handle rate limiting
       if (response.status === 429) {
         if (retryCount >= MAX_RETRIES) {
           throw new Error(`Rate limit exceeded after ${MAX_RETRIES} retries`);
@@ -64,13 +50,15 @@ export async function GET() {
         );
         await new Promise((resolve) => setTimeout(resolve, delay));
 
-        // Retry the request
         return spotify_request(url, currentToken, retryCount + 1);
       }
 
       if (!response.ok) {
-        throw new Error(
-          `Failed to fetch playlists: ${response.status} ${response.statusText}`
+        return NextResponse.json(
+          {
+            error: "Failed to fetch playlists, error: " + response.statusText,
+          },
+          { status: response.status }
         );
       }
 
@@ -90,13 +78,18 @@ export async function GET() {
   }
 
   try {
-    const data = await spotify_request(
+    const response = await spotify_request(
       "https://api.spotify.com/v1/me/playlists?limit=50",
       token
     );
+
+    if (response instanceof NextResponse) {
+      return response;
+    }
+
+    const data = response;
     const userId = data.href.split("/users/")[1].split("/")[0];
 
-    // Process initial items
     data.items.forEach((item: any) => {
       if (
         item.owner.id === userId &&
@@ -143,15 +136,24 @@ export async function GET() {
       playlist_array.map(async (playlist) => {
         const options =
           "items(track(album(external_urls,id,name,images),artists,duration_ms,external_urls,id,name,uri))";
-        const response = await spotify_request(
+        const trackResponse = await spotify_request(
           `https://api.spotify.com/v1/playlists/${
             playlist.id
           }/tracks?fields=${encodeURIComponent(options)}`,
           token
         );
+
+        if (trackResponse instanceof NextResponse) {
+          return {
+            ...playlist,
+            tracks: [],
+            error: "Failed to fetch tracks",
+          };
+        }
+
         return {
           ...playlist,
-          tracks: response.items
+          tracks: trackResponse.items
             .filter((item: any) => item.track !== null)
             .map((item: any) => ({
               name: item.track.name,
