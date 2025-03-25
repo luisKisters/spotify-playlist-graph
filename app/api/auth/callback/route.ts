@@ -43,34 +43,11 @@ export async function GET(request: Request) {
       throw new Error(data.error || "Failed to get access token");
     }
 
-    // Store the tokens in cookies
-    const response = NextResponse.redirect(new URL("/", redirectURI));
-
-    response.cookies.set("spotify_access_token", data.access_token, {
-      // httpOnly: true,
-      // secure: process.env.NODE_ENV === "production",
-      // sameSite: "lax",
-      // maxAge: data.expires_in,
-    });
-    console.log(
-      "set access token to: ",
-      response.cookies.get("spotify_access_token")
+    // For client-side auth, include the token in the URL
+    // The AuthProvider will extract it and store in localStorage
+    return NextResponse.redirect(
+      new URL(`/?token=${data.access_token}`, redirectURI)
     );
-
-    if (data.refresh_token) {
-      response.cookies.set("spotify_refresh_token", data.refresh_token, {
-        // httpOnly: true,
-        // secure: process.env.NODE_ENV === "production",
-        // sameSite: "lax",
-        // maxAge: 30 * 24 * 60 * 60, // 30 days
-      });
-      console.log(
-        "set refresh token to: ",
-        response.cookies.get("spotify_refresh_token")
-      );
-    }
-
-    return response;
   } catch (error) {
     console.error("Error during token exchange:", error);
     return NextResponse.redirect(
