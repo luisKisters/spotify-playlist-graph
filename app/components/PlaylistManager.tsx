@@ -3,13 +3,12 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "./AuthProvider";
 import { getPlaylists, savePlaylists } from "../lib/indexedDB";
-
-type Playlist = {
-  id: string;
-  name: string;
-  tracks: any[];
-  images?: any[];
-};
+import dynamic from "next/dynamic";
+import type { Playlist } from "../types/spotify";
+import Image from "next/image";
+const NetworkGraph = dynamic(() => import("./network-graph"), {
+  ssr: false,
+});
 
 export default function PlaylistManager() {
   const { token, isAuthenticated, login } = useAuth();
@@ -26,25 +25,12 @@ export default function PlaylistManager() {
     const fetchAndStorePlaylists = async () => {
       try {
         setLoading(true);
-
-        // First try to get playlists from IndexedDB
         const storedPlaylists = await getPlaylists();
 
         if (storedPlaylists && storedPlaylists.length > 0) {
           setPlaylists(storedPlaylists);
           setLoading(false);
-
-          //   // Optional: Check how old the data is before refreshing
-          //   const lastFetchTime = localStorage.getItem("playlist_last_fetch");
-          //   const shouldRefresh =
-          //     !lastFetchTime || Date.now() - parseInt(lastFetchTime) > 3600000; // 1 hour
-
-          //   if (shouldRefresh) {
-          //     // Fetch in background only if data is stale
-          //     fetchFromAPI(true); // Pass true to indicate background refresh
-          //   }
         } else {
-          // If no data in IndexedDB, fetch from API
           await fetchFromAPI(false);
         }
       } catch (err) {
@@ -74,15 +60,9 @@ export default function PlaylistManager() {
         }
 
         const playlistsData = await response.json();
-
-        // Save to IndexedDB
         await savePlaylists(playlistsData);
-
-        // Update state
         setPlaylists(playlistsData);
         setLoading(false);
-
-        // Update last fetch timestamp
         localStorage.setItem("playlist_last_fetch", Date.now().toString());
       } catch (err) {
         console.error("Error fetching from API:", err);
@@ -140,6 +120,7 @@ export default function PlaylistManager() {
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Spotify Playlist Graph</h1>
+      <NetworkGraph playlists={playlists} />
       <p className="mb-6">Successfully loaded {playlists.length} playlists</p>
 
       <div>
@@ -150,12 +131,16 @@ export default function PlaylistManager() {
               key={playlist.id}
               className="border rounded-lg p-4 hover:shadow-md transition"
             >
-              {playlist.images && playlist.images[0] && (
-                <img
-                  src={playlist.images[0].url}
-                  alt={playlist.name}
-                  className="w-full h-40 object-cover rounded mb-2"
-                />
+              {playlist.image && (
+                <div className="relative w-full aspect-square mb-2">
+                  <Image
+                    fill
+                    src={playlist.image}
+                    alt={playlist.name}
+                    className="rounded object-cover"
+                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                  />
+                </div>
               )}
               <h3 className="font-medium">{playlist.name}</h3>
               <p className="text-sm text-gray-600">

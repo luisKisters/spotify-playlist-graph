@@ -8,9 +8,15 @@ importers:
 
   .:
     dependencies:
+      '@react-sigma/core':
+        specifier: ^5.0.2
+        version: 5.0.2(graphology@0.25.4(graphology-types@0.24.8))(react@19.0.0)(sigma@3.0.1(graphology-types@0.24.8))
       graphology:
-        specifier: ^0.26.0
-        version: 0.26.0(graphology-types@0.24.8)
+        specifier: ^0.25.4
+        version: 0.25.4(graphology-types@0.24.8)
+      graphology-types:
+        specifier: ^0.24.8
+        version: 0.24.8
       next:
         specifier: 15.2.3
         version: 15.2.3(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
@@ -302,6 +308,13 @@ packages:
   '@nolyfill/is-core-module@1.0.39':
     resolution: {integrity: sha512-nn5ozdjYQpUCZlWGuxcJY/KpxkWQs4DcbMCmKojjyrYDEAGy4Ce19NN4v5MduafTwJlbKc99UA8YhSVqq9yPZA==}
     engines: {node: '>=12.4.0'}
+
+  '@react-sigma/core@5.0.2':
+    resolution: {integrity: sha512-yzGYD0Oxp8rVqhCckCRee0tMr3fJmkIB6JJFOL6McNYEek5AAyC1WRon0Dw/IaRVhNbSt8lZHplrMVgKkWw4Ng==}
+    peerDependencies:
+      graphology: ^0.25.4
+      react: ^18.0.0 || ^19.0.0
+      sigma: ^3.0.0
 
   '@rtsao/scc@1.1.0':
     resolution: {integrity: sha512-zt6OdqaDoOnJ1ZYsCYGt9YmWzDXl4vQdKTyJev62gFhRGKdx7mcT54V9KIjg+d2wi9EXsPvAPKe7i7WjfVWB8g==}
@@ -986,8 +999,8 @@ packages:
     peerDependencies:
       graphology-types: '>=0.23.0'
 
-  graphology@0.26.0:
-    resolution: {integrity: sha512-8SSImzgUUYC89Z042s+0r/vMibY7GX/Emz4LDO5e7jYXhuoWfHISPFJYjpRLUSJGq6UQ6xlenvX1p/hJdfXuXg==}
+  graphology@0.25.4:
+    resolution: {integrity: sha512-33g0Ol9nkWdD6ulw687viS8YJQBxqG5LWII6FI6nul0pq6iM2t5EKquOTFDbyTblRB3O9I+7KX4xI8u5ffekAQ==}
     peerDependencies:
       graphology-types: '>=0.24.0'
 
@@ -1348,6 +1361,9 @@ packages:
   object.values@1.2.1:
     resolution: {integrity: sha512-gXah6aZrcUxjWg2zR2MwouP2eHlCBzdV4pygudehaKXSGW4v2AsRQUK+lwwXhii6KFZcunEnmSUoYp5CXibxtA==}
     engines: {node: '>= 0.4'}
+
+  obliterator@2.0.5:
+    resolution: {integrity: sha512-42CPE9AhahZRsMNslczq0ctAEtqk8Eka26QofnqC346BZdHDySk3LWka23LI7ULIw11NmltpiLagIq8gBozxTw==}
 
   optionator@0.9.4:
     resolution: {integrity: sha512-6IpQ7mKUxRcZNLIObR0hz7lxsapSSIYNZJwXPGeF0mTVqGKFIXj1DQcMoT22S3ROcLyY/rz0PWaWZ9ayWmad9g==}
@@ -1889,6 +1905,12 @@ snapshots:
       fastq: 1.19.1
 
   '@nolyfill/is-core-module@1.0.39': {}
+
+  '@react-sigma/core@5.0.2(graphology@0.25.4(graphology-types@0.24.8))(react@19.0.0)(sigma@3.0.1(graphology-types@0.24.8))':
+    dependencies:
+      graphology: 0.25.4(graphology-types@0.24.8)
+      react: 19.0.0
+      sigma: 3.0.1(graphology-types@0.24.8)
 
   '@rtsao/scc@1.1.0': {}
 
@@ -2752,10 +2774,11 @@ snapshots:
     dependencies:
       graphology-types: 0.24.8
 
-  graphology@0.26.0(graphology-types@0.24.8):
+  graphology@0.25.4(graphology-types@0.24.8):
     dependencies:
       events: 3.3.0
       graphology-types: 0.24.8
+      obliterator: 2.0.5
 
   has-bigints@1.1.0: {}
 
@@ -3105,6 +3128,8 @@ snapshots:
       call-bound: 1.0.4
       define-properties: 1.2.1
       es-object-atoms: 1.1.1
+
+  obliterator@2.0.5: {}
 
   optionator@0.9.4:
     dependencies:
