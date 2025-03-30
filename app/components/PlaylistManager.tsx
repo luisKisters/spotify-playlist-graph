@@ -87,7 +87,7 @@ export default function PlaylistManager() {
                 const errorJson = JSON.parse(errorText);
                 console.error("Error response JSON:", errorJson);
                 errorCount++;
-              } catch (e) {
+              } catch {
                 // If not JSON, log as text
                 console.error("Error response body:", errorText);
                 errorCount++;
@@ -213,7 +213,7 @@ export default function PlaylistManager() {
     };
 
     fetchAndStorePlaylists();
-  }, [isAuthenticated, token]);
+  }, [isAuthenticated, token, fetchArtistGenres]);
 
   if (!isAuthenticated) {
     return (

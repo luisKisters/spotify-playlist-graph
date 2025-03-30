@@ -1,21 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Sigma from "sigma";
-import Graph from "graphology";
 import {
   SigmaContainer,
   useLoadGraph,
   ControlsContainer,
+  useSigma,
 } from "@react-sigma/core";
 import "@react-sigma/core/lib/style.css";
 import { LayoutForceAtlas2Control } from "@react-sigma/layout-forceatlas2";
-import { Playlist, Track, Artist, Genre } from "../types/spotify"; // We'll create this type file next
+import { Playlist, Track, Artist, Genre } from "../types/spotify";
 import { Settings } from "sigma/settings";
 import { circular } from "graphology-layout";
 import { animateNodes } from "sigma/utils";
-import { useRegisterEvents, useSigma } from "@react-sigma/core";
 import { NodeDisplayData, EdgeDisplayData } from "sigma/types";
+import Graph from "graphology";
 
 // Define node types and colors
 const NODE_TYPES = {
@@ -299,14 +298,14 @@ const InteractionControls = ({
     setShowArtists(newShowArtists);
 
     // Hide or show artist nodes
-    graph.forEachNode((nodeId, attributes) => {
+    graph.forEachNode((nodeId) => {
       if (nodeId.startsWith(NODE_TYPES.ARTIST.prefix)) {
         graph.setNodeAttribute(nodeId, "hidden", !newShowArtists);
       }
     });
 
     // Hide or show artist edges
-    graph.forEachEdge((edgeId, attributes, source, target) => {
+    graph.forEachEdge((edgeId, _, source, target) => {
       if (
         source.startsWith(NODE_TYPES.SONG.prefix) &&
         target.startsWith(NODE_TYPES.ARTIST.prefix)
@@ -331,14 +330,14 @@ const InteractionControls = ({
     // }
 
     // Hide or show genre nodes
-    graph.forEachNode((nodeId, attributes) => {
+    graph.forEachNode((nodeId) => {
       if (nodeId.startsWith(NODE_TYPES.GENRE.prefix)) {
         graph.setNodeAttribute(nodeId, "hidden", !newShowGenres);
       }
     });
 
     // Hide or show genre edges
-    graph.forEachEdge((edgeId, attributes, source, target) => {
+    graph.forEachEdge((edgeId, _, source, target) => {
       // Show both artist-genre and song-genre edges
       if (
         (source.startsWith(NODE_TYPES.ARTIST.prefix) &&
@@ -491,8 +490,8 @@ const LoadGraph = ({
   const loadGraph = useLoadGraph();
 
   useEffect(() => {
-    // Initialize graph with multi-edge support
-    const graph = new Graph({ multi: true, allowSelfLoops: false });
+    // Create a new graph instance
+    const graph = new Graph();
 
     // Maps to track node connections
     const playlistSongCounts = new Map<string, number>();
