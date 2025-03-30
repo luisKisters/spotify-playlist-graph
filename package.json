@@ -10,7 +10,9 @@
   },
   "dependencies": {
     "@react-sigma/core": "^5.0.2",
+    "@react-sigma/layout-forceatlas2": "^5.0.2",
     "graphology": "^0.26.0",
+    "graphology-layout": "^0.6.1",
     "graphology-types": "^0.24.8",
     "next": "15.2.3",
     "react": "^19.0.0",

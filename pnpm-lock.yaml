@@ -10,10 +10,16 @@ importers:
     dependencies:
       '@react-sigma/core':
         specifier: ^5.0.2
-        version: 5.0.2(graphology@0.25.4(graphology-types@0.24.8))(react@19.0.0)(sigma@3.0.1(graphology-types@0.24.8))
+        version: 5.0.2(graphology@0.26.0(graphology-types@0.24.8))(react@19.0.0)(sigma@3.0.1(graphology-types@0.24.8))
+      '@react-sigma/layout-forceatlas2':
+        specifier: ^5.0.2
+        version: 5.0.2(graphology-layout-forceatlas2@0.10.1(graphology-types@0.24.8))(graphology@0.26.0(graphology-types@0.24.8))(react@19.0.0)(sigma@3.0.1(graphology-types@0.24.8))
       graphology:
-        specifier: ^0.25.4
-        version: 0.25.4(graphology-types@0.24.8)
+        specifier: ^0.26.0
+        version: 0.26.0(graphology-types@0.24.8)
+      graphology-layout:
+        specifier: ^0.6.1
+        version: 0.6.1(graphology-types@0.24.8)
       graphology-types:
         specifier: ^0.24.8
         version: 0.24.8
@@ -315,6 +321,14 @@ packages:
       graphology: ^0.25.4
       react: ^18.0.0 || ^19.0.0
       sigma: ^3.0.0
+
+  '@react-sigma/layout-core@5.0.2':
+    resolution: {integrity: sha512-kBD/nkgKMBlDOlYslaG/n71JiWXEYwcTIhfTBkYqXh8Ukipxm/O4TdUpJeyUpjcLT/92tRnTN7m8KaGGWNpH+A==}
+
+  '@react-sigma/layout-forceatlas2@5.0.2':
+    resolution: {integrity: sha512-+x05LMmjVOtwiu9EJ7CbgtRVDo/0jNT6dXqjLWvXPVy7BD/uRF4iMs/1KhSmnR5R9TTbznkpUd4iX7o/CLkxRg==}
+    peerDependencies:
+      graphology-layout-forceatlas2: ^0.10.1
 
   '@rtsao/scc@1.1.0':
     resolution: {integrity: sha512-zt6OdqaDoOnJ1ZYsCYGt9YmWzDXl4vQdKTyJev62gFhRGKdx7mcT54V9KIjg+d2wi9EXsPvAPKe7i7WjfVWB8g==}
@@ -991,6 +1005,16 @@ packages:
   graphemer@1.4.0:
     resolution: {integrity: sha512-EtKwoO6kxCL9WO5xipiHTZlSzBm7WLT627TqC/uVRd0HKmq8NXyebnNYxDoBi7wt8eTWrUrKXCOVaFq9x1kgag==}
 
+  graphology-layout-forceatlas2@0.10.1:
+    resolution: {integrity: sha512-ogzBeF1FvWzjkikrIFwxhlZXvD2+wlY54lqhsrWprcdPjopM2J9HoMweUmIgwaTvY4bUYVimpSsOdvDv1gPRFQ==}
+    peerDependencies:
+      graphology-types: '>=0.19.0'
+
+  graphology-layout@0.6.1:
+    resolution: {integrity: sha512-m9aMvbd0uDPffUCFPng5ibRkb2pmfNvdKjQWeZrf71RS1aOoat5874+DcyNfMeCT4aQguKC7Lj9eCbqZj/h8Ag==}
+    peerDependencies:
+      graphology-types: '>=0.19.0'
+
   graphology-types@0.24.8:
     resolution: {integrity: sha512-hDRKYXa8TsoZHjgEaysSRyPdT6uB78Ci8WnjgbStlQysz7xR52PInxNsmnB7IBOM1BhikxkNyCVEFgmPKnpx3Q==}
 
@@ -999,8 +1023,8 @@ packages:
     peerDependencies:
       graphology-types: '>=0.23.0'
 
-  graphology@0.25.4:
-    resolution: {integrity: sha512-33g0Ol9nkWdD6ulw687viS8YJQBxqG5LWII6FI6nul0pq6iM2t5EKquOTFDbyTblRB3O9I+7KX4xI8u5ffekAQ==}
+  graphology@0.26.0:
+    resolution: {integrity: sha512-8SSImzgUUYC89Z042s+0r/vMibY7GX/Emz4LDO5e7jYXhuoWfHISPFJYjpRLUSJGq6UQ6xlenvX1p/hJdfXuXg==}
     peerDependencies:
       graphology-types: '>=0.24.0'
 
@@ -1298,6 +1322,9 @@ packages:
   minimist@1.2.8:
     resolution: {integrity: sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA==}
 
+  mnemonist@0.39.8:
+    resolution: {integrity: sha512-vyWo2K3fjrUw8YeeZ1zF0fy6Mu59RHokURlld8ymdUPjMlD9EC9ov1/YPqTgqRvUN9nTr3Gqfz29LYAmu0PHPQ==}
+
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
@@ -1380,6 +1407,9 @@ packages:
   p-locate@5.0.0:
     resolution: {integrity: sha512-LaNjtRWUBY++zB5nE/NwcaoMylSPk+S+ZHNB1TzdbMJMny6dynpAGt7X/tl/QYq3TIeE6nxHppbo2LGymrG5Pw==}
     engines: {node: '>=10'}
+
+  pandemonium@2.4.1:
+    resolution: {integrity: sha512-wRqjisUyiUfXowgm7MFH2rwJzKIr20rca5FsHXCMNm1W5YPP1hCtrZfgmQ62kP7OZ7Xt+cR858aB28lu5NX55g==}
 
   parent-module@1.0.1:
     resolution: {integrity: sha512-GQ2EWRpQV8/o+Aw8YqtfZZPfNRWZYkbidE9k5rpl/hC3vtHHBfGm2Ifi6qWV+coDGkrUKZAxE3Lot5kcsRlh+g==}
@@ -1906,11 +1936,28 @@ snapshots:
 
   '@nolyfill/is-core-module@1.0.39': {}
 
-  '@react-sigma/core@5.0.2(graphology@0.25.4(graphology-types@0.24.8))(react@19.0.0)(sigma@3.0.1(graphology-types@0.24.8))':
+  '@react-sigma/core@5.0.2(graphology@0.26.0(graphology-types@0.24.8))(react@19.0.0)(sigma@3.0.1(graphology-types@0.24.8))':
     dependencies:
-      graphology: 0.25.4(graphology-types@0.24.8)
+      graphology: 0.26.0(graphology-types@0.24.8)
       react: 19.0.0
       sigma: 3.0.1(graphology-types@0.24.8)
+
+  '@react-sigma/layout-core@5.0.2(graphology@0.26.0(graphology-types@0.24.8))(react@19.0.0)(sigma@3.0.1(graphology-types@0.24.8))':
+    dependencies:
+      '@react-sigma/core': 5.0.2(graphology@0.26.0(graphology-types@0.24.8))(react@19.0.0)(sigma@3.0.1(graphology-types@0.24.8))
+    transitivePeerDependencies:
+      - graphology
+      - react
+      - sigma
+
+  '@react-sigma/layout-forceatlas2@5.0.2(graphology-layout-forceatlas2@0.10.1(graphology-types@0.24.8))(graphology@0.26.0(graphology-types@0.24.8))(react@19.0.0)(sigma@3.0.1(graphology-types@0.24.8))':
+    dependencies:
+      '@react-sigma/layout-core': 5.0.2(graphology@0.26.0(graphology-types@0.24.8))(react@19.0.0)(sigma@3.0.1(graphology-types@0.24.8))
+      graphology-layout-forceatlas2: 0.10.1(graphology-types@0.24.8)
+    transitivePeerDependencies:
+      - graphology
+      - react
+      - sigma
 
   '@rtsao/scc@1.1.0': {}
 
@@ -2768,17 +2815,27 @@ snapshots:
 
   graphemer@1.4.0: {}
 
+  graphology-layout-forceatlas2@0.10.1(graphology-types@0.24.8):
+    dependencies:
+      graphology-types: 0.24.8
+      graphology-utils: 2.5.2(graphology-types@0.24.8)
+
+  graphology-layout@0.6.1(graphology-types@0.24.8):
+    dependencies:
+      graphology-types: 0.24.8
+      graphology-utils: 2.5.2(graphology-types@0.24.8)
+      pandemonium: 2.4.1
+
   graphology-types@0.24.8: {}
 
   graphology-utils@2.5.2(graphology-types@0.24.8):
     dependencies:
       graphology-types: 0.24.8
 
-  graphology@0.25.4(graphology-types@0.24.8):
+  graphology@0.26.0(graphology-types@0.24.8):
     dependencies:
       events: 3.3.0
       graphology-types: 0.24.8
-      obliterator: 2.0.5
 
   has-bigints@1.1.0: {}
 
@@ -3056,6 +3113,10 @@ snapshots:
 
   minimist@1.2.8: {}
 
+  mnemonist@0.39.8:
+    dependencies:
+      obliterator: 2.0.5
+
   ms@2.1.3: {}
 
   nanoid@3.3.11: {}
@@ -3153,6 +3214,10 @@ snapshots:
   p-locate@5.0.0:
     dependencies:
       p-limit: 3.1.0
+
+  pandemonium@2.4.1:
+    dependencies:
+      mnemonist: 0.39.8
 
   parent-module@1.0.1:
     dependencies:
