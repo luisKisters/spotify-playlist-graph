@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Sigma from "sigma";
 import Graph from "graphology";
 import {
@@ -21,17 +21,17 @@ const NODE_TYPES = {
   PLAYLIST: {
     color: "#1DB954", // Spotify green
     prefix: "playlist-",
-    baseSize: 8 as number,
+    baseSize: 4 as number,
   },
   SONG: {
     color: "#2E77D0", // Blue
     prefix: "song-",
-    baseSize: 5 as number,
+    baseSize: 2 as number,
   },
   ARTIST: {
     color: "#E91429", // Red
     prefix: "artist-",
-    baseSize: 6 as number,
+    baseSize: 3 as number,
   },
 } as const;
 
@@ -46,7 +46,13 @@ const SIGMA_SETTINGS: Partial<Settings> = {
 };
 
 // Layout Controls Component
-const LayoutControls = () => {
+const LayoutControls = ({
+  showArtists,
+  setShowArtists,
+}: {
+  showArtists: boolean;
+  setShowArtists: (show: boolean) => void;
+}) => {
   const sigma = useSigma();
   const registerEvents = useRegisterEvents();
 
@@ -91,6 +97,10 @@ const LayoutControls = () => {
     animateNodes(graph, randomPositions, { duration: 2000 });
   };
 
+  const toggleArtists = () => {
+    setShowArtists(!showArtists);
+  };
+
   return (
     <div className="flex gap-2">
       <button
@@ -105,13 +115,26 @@ const LayoutControls = () => {
       >
         Random Layout
       </button>
+      <button
+        onClick={toggleArtists}
+        className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm"
+      >
+        {showArtists ? "Hide Artists" : "Show Artists"}
+      </button>
     </div>
   );
 };
 
 // Component that loads the graph
-const LoadGraph = ({ playlists }: { playlists: Playlist[] }) => {
+const LoadGraph = ({
+  playlists,
+  showArtists,
+}: {
+  playlists: Playlist[];
+  showArtists: boolean;
+}) => {
   const loadGraph = useLoadGraph();
+  const sigma = useSigma();
 
   useEffect(() => {
     // Initialize graph with multi-edge support
@@ -120,7 +143,12 @@ const LoadGraph = ({ playlists }: { playlists: Playlist[] }) => {
     // Maps to track node degrees (number of connections)
     const artistDegrees = new Map<string, number>();
     const songDegrees = new Map<string, number>();
-    const playlistDegrees = new Map<string, number>();
+    const playlistSongCounts = new Map<string, number>();
+    const songPlaylistCounts = new Map<string, number>();
+
+    // Maps to keep track of all artists and their connections for toggling
+    const artistNodes = new Set<string>();
+    const artistEdges = new Set<string>();
 
     // Helper function to create a unique edge ID
     const createEdgeId = (source: string, target: string, type: string) => {
@@ -130,6 +158,7 @@ const LoadGraph = ({ playlists }: { playlists: Playlist[] }) => {
     // First pass: Create all nodes and track connections
     playlists.forEach((playlist) => {
       const playlistId = NODE_TYPES.PLAYLIST.prefix + playlist.id;
+      const songCount = playlist.tracks.length;
 
       // Add playlist node if it doesn't exist
       if (!graph.hasNode(playlistId)) {
@@ -140,7 +169,7 @@ const LoadGraph = ({ playlists }: { playlists: Playlist[] }) => {
           color: NODE_TYPES.PLAYLIST.color,
           size: NODE_TYPES.PLAYLIST.baseSize,
         });
-        playlistDegrees.set(playlistId, 0);
+        playlistSongCounts.set(playlistId, songCount);
       }
 
       // Process tracks
@@ -156,8 +185,14 @@ const LoadGraph = ({ playlists }: { playlists: Playlist[] }) => {
             color: NODE_TYPES.SONG.color,
             size: NODE_TYPES.SONG.baseSize,
           });
-          songDegrees.set(songId, 0);
+          songPlaylistCounts.set(songId, 0);
         }
+
+        // Increment the song's playlist count
+        songPlaylistCounts.set(
+          songId,
+          (songPlaylistCounts.get(songId) || 0) + 1
+        );
 
         // Create playlist-song edge with unique ID
         const playlistSongEdgeId = createEdgeId(
@@ -171,11 +206,6 @@ const LoadGraph = ({ playlists }: { playlists: Playlist[] }) => {
             color: NODE_TYPES.PLAYLIST.color + "80",
             size: 1,
           });
-          playlistDegrees.set(
-            playlistId,
-            (playlistDegrees.get(playlistId) || 0) + 1
-          );
-          songDegrees.set(songId, (songDegrees.get(songId) || 0) + 1);
         }
 
         // Process artists
@@ -193,8 +223,10 @@ const LoadGraph = ({ playlists }: { playlists: Playlist[] }) => {
               label: artist,
               color: NODE_TYPES.ARTIST.color,
               size: NODE_TYPES.ARTIST.baseSize,
+              hidden: !showArtists, // Hide artists by default
             });
             artistDegrees.set(artistId, 0);
+            artistNodes.add(artistId);
           }
 
           // Create song-artist edge with unique ID
@@ -208,8 +240,9 @@ const LoadGraph = ({ playlists }: { playlists: Playlist[] }) => {
               key: songArtistEdgeId,
               color: NODE_TYPES.SONG.color + "80",
               size: 1,
+              hidden: !showArtists, // Hide artist edges by default
             });
-            songDegrees.set(songId, (songDegrees.get(songId) || 0) + 1);
+            artistEdges.add(songArtistEdgeId);
             artistDegrees.set(artistId, (artistDegrees.get(artistId) || 0) + 1);
           }
         });
@@ -218,31 +251,62 @@ const LoadGraph = ({ playlists }: { playlists: Playlist[] }) => {
 
     // Second pass: Update node sizes based on their connections
     graph.forEachNode((nodeId, attributes) => {
-      let degree = 0;
-      let baseSize = NODE_TYPES.SONG.baseSize;
-
       if (nodeId.startsWith(NODE_TYPES.PLAYLIST.prefix)) {
-        degree = playlistDegrees.get(nodeId) || 0;
-        baseSize = NODE_TYPES.PLAYLIST.baseSize;
+        // For playlists, size based on number of songs
+        const songCount = playlistSongCounts.get(nodeId) || 0;
+        // Scaling formula: base size + logarithmic scaling of song count to prevent huge nodes
+        const size = NODE_TYPES.PLAYLIST.baseSize + 2 * Math.log(songCount + 1);
+        graph.setNodeAttribute(nodeId, "size", size);
       } else if (nodeId.startsWith(NODE_TYPES.SONG.prefix)) {
-        degree = songDegrees.get(nodeId) || 0;
-        baseSize = NODE_TYPES.SONG.baseSize;
+        // For songs, size based on in how many playlists they appear
+        const playlistCount = songPlaylistCounts.get(nodeId) || 0;
+        // Small base size with small increase based on playlist appearances
+        const size = NODE_TYPES.SONG.baseSize + Math.log(playlistCount + 1);
+        graph.setNodeAttribute(nodeId, "size", size);
       } else if (nodeId.startsWith(NODE_TYPES.ARTIST.prefix)) {
-        degree = artistDegrees.get(nodeId) || 0;
-        baseSize = NODE_TYPES.ARTIST.baseSize;
+        // For artists, a fixed size with small variation based on connections
+        const degree = artistDegrees.get(nodeId) || 0;
+        const size = NODE_TYPES.ARTIST.baseSize + 0.5 * Math.log(degree + 1);
+        graph.setNodeAttribute(nodeId, "size", size);
       }
-
-      // Update node size based on log of degree to prevent huge variations
-      graph.setNodeAttribute(nodeId, "size", baseSize + Math.log(degree + 1));
     });
 
     loadGraph(graph);
-  }, [loadGraph, playlists]);
+
+    // Store artist nodes and edges references for toggling visibility
+    return () => {
+      // Cleanup if needed
+    };
+  }, [loadGraph, playlists, showArtists]);
+
+  // Effect to update artist visibility when toggle changes
+  useEffect(() => {
+    if (sigma) {
+      const graph = sigma.getGraph();
+
+      graph.forEachNode((nodeId, attributes) => {
+        if (nodeId.startsWith(NODE_TYPES.ARTIST.prefix)) {
+          graph.setNodeAttribute(nodeId, "hidden", !showArtists);
+        }
+      });
+
+      graph.forEachEdge((edgeId, attributes, source, target) => {
+        if (
+          source.startsWith(NODE_TYPES.SONG.prefix) &&
+          target.startsWith(NODE_TYPES.ARTIST.prefix)
+        ) {
+          graph.setEdgeAttribute(edgeId, "hidden", !showArtists);
+        }
+      });
+    }
+  }, [sigma, showArtists]);
 
   return null;
 };
 
 export default function NetworkGraph({ playlists }: { playlists: Playlist[] }) {
+  const [showArtists, setShowArtists] = useState(false);
+
   return (
     <div className="mb-6">
       <SigmaContainer
@@ -254,10 +318,13 @@ export default function NetworkGraph({ playlists }: { playlists: Playlist[] }) {
         }}
         settings={SIGMA_SETTINGS}
       >
-        <LoadGraph playlists={playlists} />
+        <LoadGraph playlists={playlists} showArtists={showArtists} />
         <ControlsContainer position={"bottom-right"}>
           <LayoutForceAtlas2Control settings={{ settings: { slowDown: 10 } }} />
-          <LayoutControls />
+          <LayoutControls
+            showArtists={showArtists}
+            setShowArtists={setShowArtists}
+          />
         </ControlsContainer>
       </SigmaContainer>
     </div>
