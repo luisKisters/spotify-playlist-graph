@@ -1,44 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 
-interface SpotifyPlaylist {
-  id: string;
-  name: string;
-  owner: {
-    id: string;
-    display_name: string;
-  };
-  type: string;
-  images: { url: string }[];
-  description: string;
-  external_urls: {
-    spotify: string;
-  };
-}
-
-interface SpotifyTrack {
-  name: string;
-  artists: {
-    name: string;
-    id: string;
-  }[];
-  album: {
-    name: string;
-    images: { url: string }[];
-    external_urls: {
-      spotify: string;
-    };
-  };
-  external_urls: {
-    spotify: string;
-  };
-  uri: string;
-  duration_ms: number;
-}
-
-interface SpotifyTrackItem {
-  track: SpotifyTrack | null;
-}
-
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("Authorization");
   let token;
@@ -59,7 +20,7 @@ export async function GET(request: NextRequest) {
 
   // Create a Set to track unique playlist IDs
   const uniquePlaylistIds = new Set<string>();
-  const allPlaylists: SpotifyPlaylist[] = [];
+  const allPlaylists: any[] = [];
 
   async function spotify_request(
     url: string,
@@ -136,7 +97,7 @@ export async function GET(request: NextRequest) {
     const data = response;
     const userId = data.href.split("/users/")[1].split("/")[0];
 
-    data.items.forEach((item: SpotifyPlaylist) => {
+    data.items.forEach((item: any) => {
       if (
         item.owner.id === userId &&
         item.type === "playlist" &&
@@ -154,7 +115,7 @@ export async function GET(request: NextRequest) {
     while (nextUrl && pageCount < MAX_PAGES) {
       const nextData = await spotify_request(nextUrl, token);
 
-      nextData.items.forEach((item: SpotifyPlaylist) => {
+      nextData.items.forEach((item: any) => {
         if (
           item.owner.id === userId &&
           item.type === "playlist" &&
@@ -200,20 +161,19 @@ export async function GET(request: NextRequest) {
         return {
           ...playlist,
           tracks: trackResponse.items
-            .filter((item: SpotifyTrackItem) => item.track !== null)
-            .map((item: SpotifyTrackItem) => {
-              const track = item.track!;
-              return {
-                name: track.name,
-                artist: track.artists.map((artist) => artist.name).join(", "),
-                artistIds: track.artists.map((artist) => artist.id),
-                album: track.album.name,
-                image: track.album.images[0]?.url,
-                url: track.external_urls.spotify,
-                uri: track.uri,
-                duration: track.duration_ms,
-              };
-            }),
+            .filter((item: any) => item.track !== null)
+            .map((item: any) => ({
+              name: item.track.name,
+              artist: item.track.artists
+                .map((artist: any) => artist.name)
+                .join(", "),
+              artistIds: item.track.artists.map((artist: any) => artist.id),
+              album: item.track.album.name,
+              image: item.track.album.images[0]?.url,
+              url: item.track.external_urls.spotify,
+              uri: item.track.uri,
+              duration: item.track.duration_ms,
+            })),
         };
       })
     );

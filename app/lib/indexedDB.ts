@@ -1,5 +1,3 @@
-import { Playlist } from "../types/spotify";
-
 // IndexedDB utility functions
 const DB_NAME = "spotifyPlaylistGraph";
 const DB_VERSION = 1;
@@ -13,7 +11,7 @@ export const openDB = (): Promise<IDBDatabase> => {
     request.onerror = () => reject(request.error);
     request.onsuccess = () => resolve(request.result);
 
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const db = request.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: "id" });
@@ -23,7 +21,7 @@ export const openDB = (): Promise<IDBDatabase> => {
 };
 
 // Save playlists to IndexedDB
-export const savePlaylists = async (playlists: Playlist[]): Promise<void> => {
+export const savePlaylists = async (playlists: any[]): Promise<void> => {
   const db = await openDB();
   const transaction = db.transaction(STORE_NAME, "readwrite");
   const store = transaction.objectStore(STORE_NAME);
@@ -43,7 +41,7 @@ export const savePlaylists = async (playlists: Playlist[]): Promise<void> => {
 };
 
 // Get all playlists from IndexedDB
-export const getPlaylists = async (): Promise<Playlist[]> => {
+export const getPlaylists = async (): Promise<any[]> => {
   const db = await openDB();
   const transaction = db.transaction(STORE_NAME, "readonly");
   const store = transaction.objectStore(STORE_NAME);
