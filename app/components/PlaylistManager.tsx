@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "./AuthProvider";
 import { getPlaylists, savePlaylists } from "../lib/indexedDB";
 import dynamic from "next/dynamic";
-import type { Playlist } from "../types/spotify";
+import type { Playlist, Artist, Genre } from "../types/spotify";
 import Image from "next/image";
 const NetworkGraph = dynamic(() => import("./network-graph"), {
   ssr: false,
@@ -13,8 +13,145 @@ const NetworkGraph = dynamic(() => import("./network-graph"), {
 export default function PlaylistManager() {
   const { token, isAuthenticated, login } = useAuth();
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [artists, setArtists] = useState<Artist[]>([]);
+  const [genres, setGenres] = useState<Genre[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fetchingGenres, setFetchingGenres] = useState(false);
+
+  const fetchArtistGenres = async (playlistsData: Playlist[]) => {
+    setFetchingGenres(true);
+    try {
+      // Extract unique artist IDs from all tracks
+      const artistIdMap = new Map();
+
+      playlistsData.forEach((playlist) => {
+        playlist.tracks.forEach((track) => {
+          if (track.artistIds && track.artistIds.length > 0) {
+            track.artistIds.forEach((id) => {
+              if (id && id.trim() !== "") {
+                artistIdMap.set(id, true);
+              }
+            });
+          }
+        });
+      });
+
+      const uniqueArtistIds = Array.from(artistIdMap.keys());
+      console.log(`Found ${uniqueArtistIds.length} unique artist IDs`);
+
+      if (uniqueArtistIds.length === 0) {
+        console.log("No artist IDs found in tracks, skipping genre fetch");
+        return;
+      }
+
+      // Spotify API can only handle 50 IDs at a time, so batch them
+      const batchSize = 50;
+      const artistBatches = [];
+
+      for (let i = 0; i < uniqueArtistIds.length; i += batchSize) {
+        artistBatches.push(uniqueArtistIds.slice(i, i + batchSize));
+      }
+
+      let allArtists: Artist[] = [];
+      let errorCount = 0;
+
+      // Fetch each batch of artists
+      await Promise.all(
+        artistBatches.map(async (batch, index) => {
+          const idsParam = batch.join(",");
+          console.log(
+            `Fetching batch ${index + 1}/${artistBatches.length} with ${
+              batch.length
+            } artists`
+          );
+          console.log(
+            `First few IDs in batch: ${batch.slice(0, 3).join(", ")}`
+          );
+
+          try {
+            const response = await fetch(
+              `/api/get_artist_genres?ids=${idsParam}`,
+              {
+                headers: { Authorization: `Bearer ${token}` },
+              }
+            );
+
+            console.log(`Batch ${index + 1} response status:`, response.status);
+
+            if (!response.ok) {
+              console.error("Error fetching artist data:", response.statusText);
+              const errorText = await response.text();
+              try {
+                // Try to parse as JSON if possible
+                const errorJson = JSON.parse(errorText);
+                console.error("Error response JSON:", errorJson);
+                errorCount++;
+              } catch (e) {
+                // If not JSON, log as text
+                console.error("Error response body:", errorText);
+                errorCount++;
+              }
+              return;
+            }
+
+            const artistData = await response.json();
+            console.log(
+              `Received ${artistData.length} artists from batch ${index + 1}`
+            );
+
+            // Make sure we got a valid array of artists
+            if (Array.isArray(artistData)) {
+              allArtists = [...allArtists, ...artistData];
+            } else {
+              console.error("Invalid artist data format:", artistData);
+              errorCount++;
+            }
+          } catch (error) {
+            console.error(`Error in batch ${index + 1}:`, error);
+            errorCount++;
+          }
+        })
+      );
+
+      if (errorCount > 0) {
+        console.warn(
+          `${errorCount}/${artistBatches.length} batches had errors`
+        );
+      }
+
+      console.log(`Total artists data received: ${allArtists.length}`);
+      setArtists(allArtists);
+
+      if (allArtists.length === 0) {
+        console.log("No artist data received, skipping genre processing");
+        return;
+      }
+
+      // Extract and count unique genres
+      const genreMap = new Map<string, number>();
+
+      allArtists.forEach((artist) => {
+        if (artist.genres && Array.isArray(artist.genres)) {
+          artist.genres.forEach((genre) => {
+            const count = genreMap.get(genre) || 0;
+            genreMap.set(genre, count + 1);
+          });
+        }
+      });
+
+      const genreArray: Genre[] = Array.from(genreMap.entries())
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count);
+
+      console.log(`Processed ${genreArray.length} unique genres`);
+      setGenres(genreArray);
+    } catch (err) {
+      console.error("Error fetching artist genres:", err);
+    } finally {
+      setFetchingGenres(false);
+    }
+  };
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -29,6 +166,7 @@ export default function PlaylistManager() {
 
         if (storedPlaylists && storedPlaylists.length > 0) {
           setPlaylists(storedPlaylists);
+          await fetchArtistGenres(storedPlaylists);
           setLoading(false);
         } else {
           await fetchFromAPI(false);
@@ -62,6 +200,7 @@ export default function PlaylistManager() {
         const playlistsData = await response.json();
         await savePlaylists(playlistsData);
         setPlaylists(playlistsData);
+        await fetchArtistGenres(playlistsData);
         setLoading(false);
         localStorage.setItem("playlist_last_fetch", Date.now().toString());
       } catch (err) {
@@ -120,8 +259,31 @@ export default function PlaylistManager() {
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Spotify Playlist Graph</h1>
-      <NetworkGraph playlists={playlists} />
-      <p className="mb-6">Successfully loaded {playlists.length} playlists</p>
+      <NetworkGraph playlists={playlists} artists={artists} genres={genres} />
+      <p className="mb-2">
+        Successfully loaded {playlists.length} playlists and {genres.length}{" "}
+        genres
+      </p>
+
+      {playlists.length > 0 && genres.length === 0 && (
+        <div className="mb-6 bg-amber-50 border border-amber-200 p-3 rounded-md">
+          <p className="text-amber-800 text-sm">
+            Note: Unable to load genre information. This may affect the graph
+            visualization.
+          </p>
+          <button
+            onClick={() => fetchArtistGenres(playlists)}
+            disabled={fetchingGenres}
+            className={`mt-2 ${
+              fetchingGenres
+                ? "bg-amber-400"
+                : "bg-amber-600 hover:bg-amber-700"
+            } text-white text-xs px-3 py-1 rounded`}
+          >
+            {fetchingGenres ? "Loading genres..." : "Retry loading genres"}
+          </button>
+        </div>
+      )}
 
       <div>
         <h2 className="text-xl font-semibold mb-4">Your Playlists</h2>

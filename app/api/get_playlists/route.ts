@@ -167,6 +167,7 @@ export async function GET(request: NextRequest) {
               artist: item.track.artists
                 .map((artist: any) => artist.name)
                 .join(", "),
+              artistIds: item.track.artists.map((artist: any) => artist.id),
               album: item.track.album.name,
               image: item.track.album.images[0]?.url,
               url: item.track.external_urls.spotify,
