@@ -25,7 +25,7 @@ const NODE_TYPES = {
     maxSize: 15,
   },
   ARTIST: {
-    color: "#36A2EB",
+    color: "#9966FF",
     prefix: "a_",
     baseSize: 8,
     maxSize: 20,
@@ -339,7 +339,7 @@ export default function SpotifyNetworkGraph({
       },
       groups: {
         playlist: { color: { background: "#FF6384", border: "#FF6384" } },
-        artist: { color: { background: "#36A2EB", border: "#36A2EB" } },
+        artist: { color: { background: "#9966FF", border: "#9966FF" } },
         genre: { color: { background: "#FFCE56", border: "#FFCE56" } },
         song: { color: { background: "#4CA3FD", border: "#4CA3FD" } },
       },

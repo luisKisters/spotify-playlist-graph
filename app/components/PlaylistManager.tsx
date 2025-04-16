@@ -2,13 +2,25 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "./AuthProvider";
-import { getPlaylists, savePlaylists } from "../lib/indexedDB";
+import {
+  getPlaylists,
+  savePlaylists,
+  getArtists,
+  saveArtists,
+  getGenres,
+  saveGenres,
+  getMetadata,
+  saveMetadata,
+} from "../lib/indexedDB";
 import dynamic from "next/dynamic";
 import type { Playlist, Artist, Genre } from "../types/spotify";
 import Image from "next/image";
 const SpotifyNetworkGraph = dynamic(() => import("./SpotifyNetworkGraph"), {
   ssr: false,
 });
+
+// Caching settings
+const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
 export default function PlaylistManager() {
   const { token, isAuthenticated, login } = useAuth();
@@ -18,10 +30,32 @@ export default function PlaylistManager() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fetchingGenres, setFetchingGenres] = useState(false);
+  const [dataLastFetched, setDataLastFetched] = useState<number | null>(null);
 
   const fetchArtistGenres = async (playlistsData: Playlist[]) => {
     setFetchingGenres(true);
     try {
+      // Check if we have recent artists and genres in IndexedDB
+      const cachedArtists = await getArtists();
+      const lastArtistFetch = await getMetadata("lastArtistFetch");
+      const isCacheValid =
+        lastArtistFetch &&
+        Date.now() - lastArtistFetch < CACHE_DURATION &&
+        cachedArtists.length > 0;
+
+      if (isCacheValid) {
+        console.log("Using cached artist data from IndexedDB");
+        setArtists(cachedArtists);
+
+        const cachedGenres = await getGenres();
+        if (cachedGenres.length > 0) {
+          console.log("Using cached genre data from IndexedDB");
+          setGenres(cachedGenres);
+          setFetchingGenres(false);
+          return;
+        }
+      }
+
       // Extract unique artist IDs from all tracks
       const artistIdMap = new Map();
 
@@ -134,6 +168,9 @@ export default function PlaylistManager() {
       console.log(`Total artists data received: ${allArtists.length}`);
       setArtists(allArtists);
 
+      // Save artists to IndexedDB
+      await saveArtists(allArtists);
+
       if (allArtists.length === 0) {
         console.log("No artist data received, skipping genre processing");
         return;
@@ -157,6 +194,9 @@ export default function PlaylistManager() {
 
       console.log(`Processed ${genreArray.length} unique genres`);
       setGenres(genreArray);
+
+      // Save genres to IndexedDB
+      await saveGenres(genreArray);
     } catch (err) {
       console.error("Error fetching artist genres:", err);
     } finally {
@@ -173,13 +213,26 @@ export default function PlaylistManager() {
     const fetchAndStorePlaylists = async () => {
       try {
         setLoading(true);
-        const storedPlaylists = await getPlaylists();
 
-        if (storedPlaylists && storedPlaylists.length > 0) {
+        // Check if we have recent data in IndexedDB
+        const lastPlaylistFetch = await getMetadata("lastPlaylistFetch");
+        const storedPlaylists = await getPlaylists();
+        const cacheValid =
+          lastPlaylistFetch &&
+          Date.now() - lastPlaylistFetch < CACHE_DURATION &&
+          storedPlaylists.length > 0;
+
+        setDataLastFetched(lastPlaylistFetch);
+
+        if (cacheValid) {
+          console.log("Using cached playlist data from IndexedDB");
           setPlaylists(storedPlaylists);
+
+          // Also try to load artists and genres from cache
           await fetchArtistGenres(storedPlaylists);
           setLoading(false);
         } else {
+          console.log("Cache invalid or expired, fetching fresh data");
           await fetchFromAPI(false);
         }
       } catch (err) {
@@ -221,7 +274,9 @@ export default function PlaylistManager() {
         }
 
         setLoading(false);
-        localStorage.setItem("playlist_last_fetch", Date.now().toString());
+        const now = Date.now();
+        setDataLastFetched(now);
+        await saveMetadata("lastFetch", now);
       } catch (err) {
         console.error("Error fetching from API:", err);
         if (!isBackgroundFetch) {
@@ -233,6 +288,46 @@ export default function PlaylistManager() {
 
     fetchAndStorePlaylists();
   }, [isAuthenticated, token]);
+
+  // Function to manually refresh data
+  const refreshData = async () => {
+    if (!isAuthenticated) {
+      login();
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await fetch("/api/get_playlists", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.status === 401) {
+        setError("Your session has expired. Please log in again.");
+        setLoading(false);
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+
+      const playlistsData = await response.json();
+      await savePlaylists(playlistsData);
+      setPlaylists(playlistsData);
+      await fetchArtistGenres(playlistsData);
+
+      const now = Date.now();
+      setDataLastFetched(now);
+      await saveMetadata("lastFetch", now);
+    } catch (err) {
+      console.error("Error refreshing data:", err);
+      setError("Failed to refresh data from Spotify.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (!isAuthenticated) {
     return (
@@ -284,14 +379,33 @@ export default function PlaylistManager() {
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Spotify Playlist Graph</h1>
+
+      <div className="mb-4 flex justify-between items-center">
+        <div>
+          {dataLastFetched && (
+            <p className="text-sm text-gray-500">
+              Last updated: {new Date(dataLastFetched).toLocaleString()}
+            </p>
+          )}
+        </div>
+        <button
+          onClick={refreshData}
+          disabled={loading}
+          className="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-sm"
+        >
+          Refresh Data
+        </button>
+      </div>
+
       <SpotifyNetworkGraph
         playlists={playlists}
         artists={artists}
         genres={genres}
       />
-      <p className="mb-2">
-        Successfully loaded {playlists.length} playlists and {genres.length}{" "}
-        genres
+
+      <p className="mb-2 mt-4">
+        Loaded {playlists.length} playlists, {artists.length} artists, and{" "}
+        {genres.length} genres
       </p>
 
       {playlists.length > 0 && genres.length === 0 && (
