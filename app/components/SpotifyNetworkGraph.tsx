@@ -46,6 +46,7 @@ export default function SpotifyNetworkGraph({
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [isStabilizing, setIsStabilizing] = useState(false);
 
   useEffect(() => {
     // Skip if no data or no container
@@ -293,14 +294,14 @@ export default function SpotifyNetworkGraph({
           min: 10,
           max: 30,
           label: {
-            min: 8,
-            max: 30,
-            drawThreshold: 12,
-            maxVisible: 20,
+            min: 14, // Increased from 8
+            max: 40, // Increased from 30
+            drawThreshold: 8, // Decreased from 12 to show labels earlier
+            maxVisible: 30, // Increased from 20
           },
         },
         font: {
-          size: 12,
+          size: 16, // Increased from 12
           face: "Tahoma",
         },
       },
@@ -316,7 +317,10 @@ export default function SpotifyNetworkGraph({
       physics: {
         enabled: true,
         stabilization: {
-          iterations: 100,
+          enabled: true,
+          iterations: 200, // Increased for better initial layout
+          updateInterval: 25,
+          onlyDynamicEdges: false,
           fit: true,
         },
         barnesHut: {
@@ -327,8 +331,8 @@ export default function SpotifyNetworkGraph({
       },
       interaction: {
         tooltipDelay: 200,
-        hideEdgesOnDrag: true,
-        hideEdgesOnZoom: true,
+        hideEdgesOnDrag: false,
+        hideEdgesOnZoom: false,
         multiselect: false,
         navigationButtons: true,
         zoomView: true,
@@ -350,9 +354,20 @@ export default function SpotifyNetworkGraph({
 
     networkRef.current = network;
     setIsInitialized(true);
+    setIsStabilizing(true);
 
     // Update allNodes ref with the latest nodes
     allNodes = nodes.get({ returnType: "Object" });
+
+    // Disable physics after stabilization to prevent node movement
+    network.once("stabilizationIterationsDone", () => {
+      // Fit the network to view
+      network.fit();
+
+      // Disable physics to prevent further movement
+      network.setOptions({ physics: { enabled: false } });
+      setIsStabilizing(false);
+    });
 
     // Neighborhood highlight function
     function neighbourhoodHighlight(params: any) {
@@ -438,11 +453,6 @@ export default function SpotifyNetworkGraph({
     // Register click event
     network.on("click", neighbourhoodHighlight);
 
-    // Stabilize and fit to viewport
-    network.once("stabilizationIterationsDone", () => {
-      network.fit();
-    });
-
     return () => {
       if (networkRef.current) {
         networkRef.current.destroy();
@@ -463,6 +473,11 @@ export default function SpotifyNetworkGraph({
         {!isInitialized && playlists.length === 0 && (
           <div className="flex h-full items-center justify-center text-gray-500">
             No playlist data available to display
+          </div>
+        )}
+        {isStabilizing && (
+          <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-70">
+            <div className="text-gray-700">Stabilizing network...</div>
           </div>
         )}
       </div>
