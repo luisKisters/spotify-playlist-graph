@@ -55,64 +55,75 @@ export default function PlaylistManager() {
 
       let allArtists: Artist[] = [];
       let errorCount = 0;
+      let authErrorOccurred = false;
 
       // Fetch each batch of artists
-      await Promise.all(
-        artistBatches.map(async (batch, index) => {
-          const idsParam = batch.join(",");
-          console.log(
-            `Fetching batch ${index + 1}/${artistBatches.length} with ${
-              batch.length
-            } artists`
-          );
-          console.log(
-            `First few IDs in batch: ${batch.slice(0, 3).join(", ")}`
-          );
+      for (let index = 0; index < artistBatches.length; index++) {
+        if (authErrorOccurred) break;
 
-          try {
-            const response = await fetch(
-              `/api/get_artist_genres?ids=${idsParam}`,
-              {
-                headers: { Authorization: `Bearer ${token}` },
-              }
-            );
+        const batch = artistBatches[index];
+        const idsParam = batch.join(",");
+        console.log(
+          `Fetching batch ${index + 1}/${artistBatches.length} with ${
+            batch.length
+          } artists`
+        );
+        console.log(`First few IDs in batch: ${batch.slice(0, 3).join(", ")}`);
 
-            console.log(`Batch ${index + 1} response status:`, response.status);
-
-            if (!response.ok) {
-              console.error("Error fetching artist data:", response.statusText);
-              const errorText = await response.text();
-              try {
-                // Try to parse as JSON if possible
-                const errorJson = JSON.parse(errorText);
-                console.error("Error response JSON:", errorJson);
-                errorCount++;
-              } catch (e) {
-                // If not JSON, log as text
-                console.error("Error response body:", errorText);
-                errorCount++;
-              }
-              return;
+        try {
+          const response = await fetch(
+            `/api/get_artist_genres?ids=${idsParam}`,
+            {
+              headers: { Authorization: `Bearer ${token}` },
             }
+          );
 
-            const artistData = await response.json();
-            console.log(
-              `Received ${artistData.length} artists from batch ${index + 1}`
-            );
+          console.log(`Batch ${index + 1} response status:`, response.status);
 
-            // Make sure we got a valid array of artists
-            if (Array.isArray(artistData)) {
-              allArtists = [...allArtists, ...artistData];
-            } else {
-              console.error("Invalid artist data format:", artistData);
+          if (response.status === 401) {
+            console.error("Auth token expired during artist data fetch");
+            authErrorOccurred = true;
+            // Set auth error that will prompt user to login again
+            setError("Your session has expired. Please log in again.");
+            setFetchingGenres(false);
+            return;
+          }
+
+          if (!response.ok) {
+            console.error("Error fetching artist data:", response.statusText);
+            const errorText = await response.text();
+            try {
+              // Try to parse as JSON if possible
+              const errorJson = JSON.parse(errorText);
+              console.error("Error response JSON:", errorJson);
+              errorCount++;
+            } catch (e) {
+              // If not JSON, log as text
+              console.error("Error response body:", errorText);
               errorCount++;
             }
-          } catch (error) {
-            console.error(`Error in batch ${index + 1}:`, error);
+            continue;
+          }
+
+          const artistData = await response.json();
+          console.log(
+            `Received ${artistData.length} artists from batch ${index + 1}`
+          );
+
+          // Make sure we got a valid array of artists
+          if (Array.isArray(artistData)) {
+            allArtists = [...allArtists, ...artistData];
+          } else {
+            console.error("Invalid artist data format:", artistData);
             errorCount++;
           }
-        })
-      );
+        } catch (error) {
+          console.error(`Error in batch ${index + 1}:`, error);
+          errorCount++;
+        }
+      }
+
+      if (authErrorOccurred) return;
 
       if (errorCount > 0) {
         console.warn(
@@ -190,6 +201,7 @@ export default function PlaylistManager() {
 
         if (response.status === 401) {
           setError("Your session has expired. Please log in again.");
+          setLoading(false);
           return;
         }
 
@@ -200,7 +212,14 @@ export default function PlaylistManager() {
         const playlistsData = await response.json();
         await savePlaylists(playlistsData);
         setPlaylists(playlistsData);
-        await fetchArtistGenres(playlistsData);
+
+        try {
+          await fetchArtistGenres(playlistsData);
+        } catch (genreError) {
+          console.error("Error fetching artist genres:", genreError);
+          // Continue even if genre fetch fails, as we still have playlist data
+        }
+
         setLoading(false);
         localStorage.setItem("playlist_last_fetch", Date.now().toString());
       } catch (err) {
@@ -245,13 +264,19 @@ export default function PlaylistManager() {
     return (
       <div className="p-6 max-w-4xl mx-auto">
         <h1 className="text-2xl font-bold mb-4">Error Loading Playlists</h1>
-        <p className="text-red-500 mb-4">{error}</p>
-        <button
-          onClick={login}
-          className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded transition"
-        >
-          Try logging in again
-        </button>
+        <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-6">
+          <p className="text-red-600 mb-4">{error}</p>
+          <p className="text-gray-700 mb-4">
+            This may be caused by an expired session. Please try logging in
+            again.
+          </p>
+          <button
+            onClick={login}
+            className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md transition"
+          >
+            Login with Spotify
+          </button>
+        </div>
       </div>
     );
   }
