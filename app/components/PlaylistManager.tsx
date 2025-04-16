@@ -6,7 +6,7 @@ import { getPlaylists, savePlaylists } from "../lib/indexedDB";
 import dynamic from "next/dynamic";
 import type { Playlist, Artist, Genre } from "../types/spotify";
 import Image from "next/image";
-const NetworkGraph = dynamic(() => import("./network-graph"), {
+const SpotifyNetworkGraph = dynamic(() => import("./SpotifyNetworkGraph"), {
   ssr: false,
 });
 
@@ -259,7 +259,11 @@ export default function PlaylistManager() {
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Spotify Playlist Graph</h1>
-      <NetworkGraph playlists={playlists} artists={artists} genres={genres} />
+      <SpotifyNetworkGraph
+        playlists={playlists}
+        artists={artists}
+        genres={genres}
+      />
       <p className="mb-2">
         Successfully loaded {playlists.length} playlists and {genres.length}{" "}
         genres

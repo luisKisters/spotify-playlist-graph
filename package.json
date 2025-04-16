@@ -17,7 +17,9 @@
     "next": "15.2.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "sigma": "^3.0.1"
+    "sigma": "^3.0.1",
+    "vis-data": "^7.1.9",
+    "vis-network": "^9.1.9"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
