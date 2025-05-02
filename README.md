@@ -1,36 +1,68 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🎵 Spotify Playlist Graph
 
-## Getting Started
+[![Vercel](https://vercelbadge.vercel.app/api/luiskisters/spotify-playlist-graph)](https://spotify-playlist-graph.vercel.app)
 
-First, run the development server:
+**Visualize your Spotify playlists as an interactive network graph. Explore how your playlists, tracks, artists, and genres connect!**
+
+---
+
+## ✨ Features
+
+- **Spotify Login:** Securely authenticate with your Spotify account.
+- **Playlist Graph:** Visualize playlists, tracks, artists, and genres as a network.
+- **Genre & Artist Insights:** See how your music taste connects across genres and artists.
+- **Node Distance Control:** Adjust the spacing between nodes in the graph interactively.
+- **Caching:** Data is cached locally for fast reloads.
+
+## 🚀 Demo
+
+Check out the live app: [spotify-playlist-graph.vercel.app](https://spotify-playlist-graph.vercel.app)
+
+## 🛠️ Getting Started
+
+### 1. Clone the repository
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/luiskisters/spotify-playlist-graph.git
+cd spotify-playlist-graph
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Install dependencies
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+pnpm install # or npm install or yarn install
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 3. Set up environment variables
 
-## Learn More
+Create a `.env.local` file in the root directory with the following variables:
 
-To learn more about Next.js, take a look at the following resources:
+```env
+SPOTIFY_CLIENT_ID=your_spotify_client_id
+SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
+BASE_URL=http://localhost:3000
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- Get your Spotify credentials from the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/applications).
+- Set `BASE_URL` to your local dev URL or your deployed URL on Vercel.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 4. Run the development server
 
-## Deploy on Vercel
+```bash
+pnpm dev # or npm run dev or yarn dev
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## ☁️ Deployment
+
+This app is ready to deploy on [Vercel](https://vercel.com/). Just set the same environment variables in your Vercel project settings.
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new?repo=https://github.com/luiskisters/spotify-playlist-graph)
+
+---
+
+**Short repo description:**  
+Visualize your Spotify playlists, tracks, artists, and genres as an interactive network graph.
+
+Let me know if you want this written directly to your README.md or need any more tweaks!
