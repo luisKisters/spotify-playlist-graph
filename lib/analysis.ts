@@ -19,6 +19,8 @@ export interface PlaylistPair {
   sharedArtists: number;
   /** 0..1 similarity blending track and artist overlap */
   score: number;
+  /** 0..1 similarity from shared artists alone */
+  artistScore: number;
 }
 
 export interface Duplicate {
@@ -145,6 +147,7 @@ export function analyze(input: Playlist[]): Library {
       sharedTracks: st,
       sharedArtists: sa,
       score: 0.6 * trackJaccard + 0.4 * artistJaccard,
+      artistScore: artistJaccard,
     });
   }
 

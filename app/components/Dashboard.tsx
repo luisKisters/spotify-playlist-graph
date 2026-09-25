@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { genreProfile, type Library } from "@/lib/analysis";
 import {
   GENRE_PREFIX,
@@ -9,55 +9,93 @@ import {
   clusterColor,
   genreClusters,
   overlapClusters,
-  type ColorBy,
-  type Density,
-  type GraphMode,
+  smartClusters,
+  type Clusters,
 } from "@/lib/graph";
-import { demoGenres } from "@/lib/demo";
+import { applyFilters } from "@/lib/filter";
+import type { LibraryExport } from "@/lib/export";
 import { loadGenres } from "@/lib/genres";
+import { DEFAULT_SETTINGS, loadSettings, saveSettings, type GraphSettings } from "@/lib/settings";
 import type { User } from "@/lib/types";
 import { Logo } from "./Landing";
 import Panel from "./Panel";
+import GraphSettingsPanel from "./GraphSettingsPanel";
+import ExportPanel from "./ExportPanel";
+import type { GraphHandle } from "./GraphView";
 
 const GraphView = dynamic(() => import("./GraphView"), { ssr: false });
 
-const MODES: { id: GraphMode; label: string }[] = [
-  { id: "playlists", label: "Playlists" },
-  { id: "artists", label: "Artists" },
-  { id: "songs", label: "Songs" },
-  { id: "genres", label: "Genres" },
+type Tab = "graph" | "analytics" | "export";
+const TABS: { id: Tab; label: string }[] = [
+  { id: "graph", label: "Graph settings" },
+  { id: "analytics", label: "Analytics" },
+  { id: "export", label: "Export" },
 ];
-const DENSITY_LABELS = ["Sparse", "Light", "Balanced", "Rich", "Dense"];
+
+export type Source = "spotify" | "demo" | "file";
 
 interface Props {
   library: Library;
   user: User | null;
-  demo: boolean;
+  source: Source;
+  /** Genres that come with the data (demo or an opened export), so no lookup is needed. */
+  presetGenres: Map<string, string[]> | null;
   error: string | null;
   onRefresh?: () => void;
   onLogout: () => void;
+  onImport: (data: LibraryExport) => void;
 }
 
-export default function Dashboard({ library, user, demo, error, onRefresh, onLogout }: Props) {
-  const [mode, setMode] = useState<GraphMode>("playlists");
-  const [density, setDensity] = useState<Density>(3);
-  const [colorBy, setColorBy] = useState<ColorBy>("overlap");
+export default function Dashboard({
+  library,
+  user,
+  source,
+  presetGenres,
+  error,
+  onRefresh,
+  onLogout,
+  onImport,
+}: Props) {
+  const [settings, setSettings] = useState<GraphSettings>(DEFAULT_SETTINGS);
+  useEffect(() => setSettings(loadSettings()), []);
+  const update = (patch: Partial<GraphSettings>) =>
+    setSettings((s) => {
+      const next = { ...s, ...patch };
+      saveSettings(next);
+      return next;
+    });
+
+  const [tab, setTab] = useState<Tab>("graph");
+  const [panelOpen, setPanelOpen] = useState(true);
   const [selected, setSelected] = useState<string | null>(null);
   const [focusCluster, setFocusCluster] = useState<number | null>(null);
+  const [hidden, setHidden] = useState<Set<number>>(new Set());
   const [query, setQuery] = useState("");
+  const graphRef = useRef<GraphHandle>(null);
 
-  // Genres are looked up lazily, the first time a genre feature is used.
-  const wantGenres = mode === "genres" || colorBy === "genre";
-  const [artistGenres, setArtistGenres] = useState<Map<string, string[]> | null>(null);
+  // Cluster indexes mean something else once the grouping changes.
+  useEffect(() => {
+    setHidden(new Set());
+    setFocusCluster(null);
+  }, [settings.clusterBy, library]);
+
+  // Genres are looked up lazily, the first time something needs them.
+  const wantGenres =
+    settings.mode === "genres" ||
+    settings.clusterBy === "genre" ||
+    settings.clusterBy === "smart" ||
+    tab === "export" ||
+    /genre:/i.test(settings.filter);
+  const [artistGenres, setArtistGenres] = useState<Map<string, string[]> | null>(presetGenres);
   const [genreProgress, setGenreProgress] = useState<{ done: number; total: number } | null>(null);
   const genresStarted = useRef(false);
   useEffect(() => {
-    if (!wantGenres || genresStarted.current) return;
-    genresStarted.current = true;
-    if (demo) {
-      setArtistGenres(demoGenres());
+    if (presetGenres) {
+      setArtistGenres(presetGenres);
       return;
     }
+    if (!wantGenres || genresStarted.current) return;
+    genresStarted.current = true;
     const controller = new AbortController();
     loadGenres(
       library,
@@ -71,20 +109,50 @@ export default function Dashboard({ library, user, demo, error, onRefresh, onLog
       controller.abort();
       genresStarted.current = false;
     };
-  }, [wantGenres, demo, library]);
+  }, [wantGenres, presetGenres, library]);
+
+  const genresLoading = !presetGenres && wantGenres && (!genreProgress || genreProgress.done < genreProgress.total);
+  // While genres stream in, keep the layout stable; rebuild once they're all here.
+  const stableGenres = useStable(artistGenres, genresLoading);
 
   const genres = useMemo(
-    () => (artistGenres ? genreProfile(library, artistGenres) : null),
-    [library, artistGenres]
+    () => (stableGenres ? genreProfile(library, stableGenres) : null),
+    [library, stableGenres]
   );
-  const overlap = useMemo(() => overlapClusters(library), [library]);
-  const clusters = useMemo(
-    () => (colorBy === "genre" && genres?.ranked.length ? genreClusters(library, genres) : overlap),
-    [colorBy, genres, library, overlap]
+  const clusters: Clusters = useMemo(() => {
+    if (settings.clusterBy === "genre" && genres?.ranked.length) return genreClusters(library, genres);
+    if (settings.clusterBy === "smart") return smartClusters(library, stableGenres);
+    return overlapClusters(library, settings.clusterBy === "artists" ? "artists" : "overlap");
+  }, [settings.clusterBy, genres, library, stableGenres]);
+
+  const filter = useDeferredValue(settings.filter);
+  const { mode, linksPerNode, minSimilarity, minPlaylists, maxNodes, orphans } = settings;
+  const graph = useMemo(() => {
+    const g = buildGraph(
+      library,
+      { ...DEFAULT_SETTINGS, mode, linksPerNode, minSimilarity, minPlaylists, maxNodes },
+      clusters,
+      genres
+    );
+    applyFilters(g, library, stableGenres, { query: filter, orphans, hidden });
+    return g;
+  }, [library, mode, linksPerNode, minSimilarity, minPlaylists, maxNodes, clusters, genres, stableGenres, filter, orphans, hidden]);
+
+  const clusterSizes = useMemo(() => {
+    const sizes = new Map<number, number>();
+    clusters.of.forEach((c) => sizes.set(c, (sizes.get(c) ?? 0) + 1));
+    return sizes;
+  }, [clusters]);
+
+  const { centerForce, repelForce, linkForce, linkDistance, clusterForce } = settings;
+  const forces = useMemo(
+    () => ({ centerForce, repelForce, linkForce, linkDistance, clusterForce }),
+    [centerForce, repelForce, linkForce, linkDistance, clusterForce]
   );
-  const graph = useMemo(
-    () => buildGraph(library, mode, density, clusters, genres),
-    [library, mode, density, clusters, genres]
+  const { nodeSize, linkThickness, textFade, labelSize } = settings;
+  const display = useMemo(
+    () => ({ nodeSize, linkThickness, textFade, labelSize }),
+    [nodeSize, linkThickness, textFade, labelSize]
   );
 
   const results = useMemo(() => search(library, genres, query), [library, genres, query]);
@@ -101,19 +169,21 @@ export default function Dashboard({ library, user, demo, error, onRefresh, onLog
     };
     if (query.trim()) results.forEach((r) => add(r.id));
     else if (focusCluster !== null) {
-      clusters.of.forEach((c, pid) => c === focusCluster && ids.add(pid));
-      if (colorBy === "genre") ids.add(GENRE_PREFIX + clusters.labels[focusCluster]);
+      graph.forEachNode((node, a) => a.cluster === focusCluster && ids.add(node));
     } else if (selected && !graph.hasNode(selected)) add(selected);
     return ids.size ? ids : null;
-  }, [query, results, focusCluster, clusters, colorBy, selected, graph, library, genres]);
+  }, [query, results, focusCluster, selected, graph, library, genres]);
 
   const select = (id: string | null) => {
     setSelected(id);
     setQuery("");
     setFocusCluster(null);
+    if (id) {
+      setTab("analytics");
+      setPanelOpen(true);
+    }
   };
 
-  const genresLoading = wantGenres && !demo && (!genreProgress || genreProgress.done < genreProgress.total);
   const genreStatus = !wantGenres
     ? null
     : genresLoading
@@ -124,7 +194,7 @@ export default function Dashboard({ library, user, demo, error, onRefresh, onLog
 
   const legend = clusters.labels
     .map((label, i) => ({ label, i }))
-    .filter(({ i }) => [...clusters.of.values()].includes(i));
+    .filter(({ i }) => clusterSizes.has(i) && !hidden.has(i));
 
   return (
     <div className="flex h-full flex-col">
@@ -135,7 +205,7 @@ export default function Dashboard({ library, user, demo, error, onRefresh, onLog
         </div>
         <SearchBox query={query} setQuery={setQuery} results={results} onPick={select} />
         <div className="ml-auto flex shrink-0 items-center gap-1">
-          {demo ? (
+          {source !== "spotify" ? (
             <a href="/api/auth/login" className="px-2 py-1.5 text-xs font-medium text-accent hover:underline">
               Connect Spotify
             </a>
@@ -154,39 +224,21 @@ export default function Dashboard({ library, user, demo, error, onRefresh, onLog
               // eslint-disable-next-line @next/next/no-img-element
               <img src={user.image} alt="" className="h-5 w-5 rounded-full object-cover" />
             )}
-            {demo ? "Exit demo" : "Log out"}
+            {source === "demo" ? "Exit demo" : source === "file" ? "Close file" : "Log out"}
+          </button>
+          <button
+            onClick={() => setPanelOpen(!panelOpen)}
+            className="hidden rounded-md p-1.5 text-zinc-400 hover:bg-white/5 hover:text-white lg:block"
+            title={panelOpen ? "Hide sidebar" : "Show sidebar"}
+            aria-label={panelOpen ? "Hide sidebar" : "Show sidebar"}
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <rect x="3" y="4" width="18" height="16" rx="2" />
+              <path d="M15 4v16" />
+            </svg>
           </button>
         </div>
       </header>
-
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-line px-4 py-2 text-xs">
-        <Segmented options={MODES} value={mode} onChange={(m) => { setMode(m); setFocusCluster(null); }} />
-        <label className="flex items-center gap-2 text-zinc-400">
-          Density
-          <input
-            type="range"
-            min={1}
-            max={5}
-            step={1}
-            value={density}
-            onChange={(e) => setDensity(Number(e.target.value) as Density)}
-            className="w-24 accent-[var(--color-accent)] focus:outline-none"
-          />
-          <span className="w-14 text-zinc-300">{DENSITY_LABELS[density - 1]}</span>
-        </label>
-        <div className="flex items-center gap-2 text-zinc-400">
-          Color by
-          <Segmented
-            options={[
-              { id: "overlap" as ColorBy, label: "Overlap" },
-              { id: "genre" as ColorBy, label: "Genre" },
-            ]}
-            value={colorBy}
-            onChange={(c) => { setColorBy(c); setFocusCluster(null); }}
-          />
-        </div>
-        {genreStatus && <span className="text-zinc-500">{genreStatus}</span>}
-      </div>
 
       {error && (
         <div className="border-b border-line px-4 py-2 text-xs text-red-300">
@@ -200,26 +252,29 @@ export default function Dashboard({ library, user, demo, error, onRefresh, onLog
       )}
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        <div className="relative h-[55vh] shrink-0 lg:h-auto lg:flex-1">
+        <div className="relative h-[60vh] shrink-0 lg:h-auto lg:flex-1">
           {library.playlists.size === 0 ? (
             <div className="grid h-full place-items-center px-6 text-center text-sm text-zinc-400">
               No playlists of your own yet. Create one on Spotify, then refresh.
             </div>
           ) : (
             <GraphView
+              handle={graphRef}
               graph={graph}
+              forces={forces}
+              display={display}
               selected={query.trim() || focusCluster !== null ? null : selected}
               highlight={highlight}
               onSelect={select}
             />
           )}
-          {mode === "genres" && !genres?.ranked.length && (
+          {settings.mode === "genres" && !genres?.ranked.length && (
             <div className="pointer-events-none absolute inset-x-0 top-4 text-center text-xs text-zinc-400">
               {genreStatus ?? "Loading genres…"}
             </div>
           )}
-          {legend.length > 1 && (
-            <ul className="absolute bottom-4 right-4 hidden max-w-56 space-y-0.5 rounded-lg border border-line bg-canvas/85 p-2 text-xs backdrop-blur md:block">
+          {legend.length > 1 && !(panelOpen && tab === "graph") && (
+            <ul className="scrollbar-thin absolute bottom-4 right-4 hidden max-h-[45%] max-w-56 space-y-0.5 overflow-y-auto rounded-lg border border-line bg-canvas/85 p-2 text-xs backdrop-blur md:block">
               {legend.map(({ label, i }) => (
                 <li key={i}>
                   <button
@@ -236,44 +291,68 @@ export default function Dashboard({ library, user, demo, error, onRefresh, onLog
             </ul>
           )}
         </div>
-        <aside className="scrollbar-thin min-h-0 flex-1 overflow-y-auto border-t border-line lg:w-[380px] lg:flex-none lg:border-l lg:border-t-0">
-          <Panel
-            library={library}
-            clusters={clusters}
-            genres={genres}
-            selected={selected}
-            onSelect={select}
-          />
-        </aside>
+        {panelOpen && (
+          <aside className="flex min-h-0 flex-1 flex-col border-t border-line bg-panel lg:w-[360px] lg:flex-none lg:border-l lg:border-t-0">
+            <nav className="flex shrink-0 border-b border-line px-2" role="tablist">
+              {TABS.map((t) => (
+                <button
+                  key={t.id}
+                  role="tab"
+                  aria-selected={tab === t.id}
+                  onClick={() => setTab(t.id)}
+                  className={`-mb-px border-b-2 px-3 py-2.5 text-xs font-medium transition ${
+                    tab === t.id
+                      ? "border-accent text-white"
+                      : "border-transparent text-zinc-500 hover:text-zinc-200"
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </nav>
+            <div key={tab} className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
+              {tab === "graph" && (
+                <GraphSettingsPanel
+                  settings={settings}
+                  update={update}
+                  clusters={clusters}
+                  clusterSizes={clusterSizes}
+                  hidden={hidden}
+                  setHidden={setHidden}
+                  focusCluster={focusCluster}
+                  setFocusCluster={setFocusCluster}
+                  onAnimate={() => graphRef.current?.animate()}
+                  nodeCount={graph.order}
+                  edgeCount={graph.size}
+                  status={genreStatus}
+                />
+              )}
+              {tab === "analytics" && (
+                <Panel library={library} clusters={clusters} genres={genres} selected={selected} onSelect={select} />
+              )}
+              {tab === "export" && (
+                <ExportPanel
+                  library={library}
+                  artistGenres={artistGenres}
+                  clusters={clusters}
+                  genreStatus={genresLoading ? genreStatus : null}
+                  exportPng={async (whole) => graphRef.current?.exportPng(whole)}
+                  onImport={onImport}
+                />
+              )}
+            </div>
+          </aside>
+        )}
       </div>
     </div>
   );
 }
 
-function Segmented<T extends string>({
-  options,
-  value,
-  onChange,
-}: {
-  options: { id: T; label: string }[];
-  value: T;
-  onChange: (v: T) => void;
-}) {
-  return (
-    <div className="flex rounded-md bg-raised p-0.5">
-      {options.map((o) => (
-        <button
-          key={o.id}
-          onClick={() => onChange(o.id)}
-          className={`rounded px-2.5 py-1 font-medium transition ${
-            value === o.id ? "bg-white/10 text-white" : "text-zinc-500 hover:text-zinc-200"
-          }`}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
-  );
+/** Returns `value`, but holds the last settled one while `pending` is true. */
+function useStable<T>(value: T, pending: boolean): T | null {
+  const last = useRef<T | null>(null);
+  if (!pending) last.current = value;
+  return last.current;
 }
 
 interface Result {
