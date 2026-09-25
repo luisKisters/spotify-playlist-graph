@@ -1,7 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { AuthProvider } from "./components/AuthProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,8 +13,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Spotify Playlist Graph",
-  description: "Visualize and manage your Spotify playlists",
+  title: "Playlist Graph",
+  description:
+    "See how your Spotify playlists connect: overlap, shared artists, duplicates and clusters of taste.",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0b0d10",
 };
 
 export default function RootLayout({
@@ -25,10 +29,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
-        <AuthProvider>{children}</AuthProvider>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        {children}
       </body>
     </html>
   );
