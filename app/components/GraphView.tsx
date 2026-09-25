@@ -1,18 +1,32 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useImperativeHandle, useRef, type Ref } from "react";
 import Sigma from "sigma";
 import type Graph from "graphology";
-import type { NodeDisplayData, PartialButFor } from "sigma/types";
+import type { EdgeDisplayData, NodeDisplayData, PartialButFor } from "sigma/types";
+import { downloadAsPNG } from "@sigma/export-image";
+import { ForceLayout } from "@/lib/layout";
+import type { DisplaySettings, ForceSettings } from "@/lib/settings";
+
+export interface GraphHandle {
+  /** Re-runs the layout from its current positions, like Obsidian's "Animate". */
+  animate: () => void;
+  fit: () => void;
+  exportPng: (whole: boolean) => Promise<void>;
+}
 
 interface Props {
   graph: Graph;
+  forces: ForceSettings;
+  display: DisplaySettings;
   selected: string | null;
   /** Nodes matching the current search; everything else is dimmed. */
   highlight: Set<string> | null;
   onSelect: (id: string | null) => void;
+  handle?: Ref<GraphHandle>;
 }
 
+const BACKGROUND = "#0b0d10";
 const DIM_NODE = "#2a2f36";
 const DIM_EDGE = "#121419";
 let fontFamily = "system-ui, sans-serif";
@@ -44,33 +58,56 @@ function drawHover(
   ctx.fillText(data.label, x + pad, data.y + size / 3);
 }
 
-export default function GraphView({ graph, selected, highlight, onSelect }: Props) {
+/** Obsidian-style text fade: higher values show labels at smaller zoom. */
+const labelThreshold = (textFade: number) => Math.max(0, 6 - textFade * 2);
+
+export default function GraphView({ graph, forces, display, selected, highlight, onSelect, handle }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
-  const state = useRef({ selected, highlight, hovered: null as string | null });
+  const layoutRef = useRef<ForceLayout | null>(null);
+  const state = useRef({ selected, highlight, hovered: null as string | null, display });
+  state.current.display = display;
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  const forcesRef = useRef(forces);
+  forcesRef.current = forces;
+
+  // Freeze the coordinate frame so spreading nodes apart actually looks spread
+  // out, instead of sigma rescaling everything back to fit the screen.
+  const refit = (animate = true) => {
+    const sigma = sigmaRef.current;
+    if (!sigma) return;
+    sigma.setCustomBBox(null);
+    sigma.refresh();
+    sigma.setCustomBBox(sigma.getBBox());
+    if (animate) sigma.getCamera().animatedReset({ duration: 400 });
+    else sigma.getCamera().setState({ x: 0.5, y: 0.5, ratio: 1, angle: 0 });
+  };
 
   useEffect(() => {
     if (!container.current) return;
     const smallGraph = graph.order <= 120;
     fontFamily = getComputedStyle(document.body).fontFamily || fontFamily;
 
+    const layout = new ForceLayout(graph, forcesRef.current);
+    layoutRef.current = layout;
+
+    const d = state.current.display;
     const sigma = new Sigma(graph, container.current, {
       labelColor: { color: "#d1d5db" },
       labelFont: fontFamily,
       labelWeight: "500",
-      labelSize: 12,
+      labelSize: d.labelSize,
       labelDensity: 0.6,
-      labelRenderedSizeThreshold: 6,
+      labelRenderedSizeThreshold: labelThreshold(d.textFade),
       zIndex: true,
       defaultDrawNodeHover: drawHover,
-      minCameraRatio: 0.05,
-      maxCameraRatio: 3,
+      minCameraRatio: 0.02,
+      maxCameraRatio: 8,
       stagePadding: 40,
       nodeReducer: (node, data) => {
-        const { selected, highlight, hovered } = state.current;
-        const res: Partial<NodeDisplayData> = { ...data };
+        const { selected, highlight, hovered, display } = state.current;
+        const res: Partial<NodeDisplayData> = { ...data, size: data.size * display.nodeSize };
         const kind = graph.getNodeAttribute(node, "kind");
         if (kind === "playlist" && smallGraph) res.forceLabel = true;
 
@@ -87,7 +124,7 @@ export default function GraphView({ graph, selected, highlight, onSelect }: Prop
           }
         } else if (highlight) {
           if (highlight.has(node)) {
-            res.forceLabel = true;
+            res.forceLabel = highlight.size <= 60;
             res.zIndex = 3;
           } else {
             res.color = DIM_NODE;
@@ -98,9 +135,9 @@ export default function GraphView({ graph, selected, highlight, onSelect }: Prop
         return res;
       },
       edgeReducer: (edge, data) => {
-        const { selected, highlight, hovered } = state.current;
+        const { selected, highlight, hovered, display } = state.current;
         const focus = hovered ?? selected;
-        const res = { ...data };
+        const res: Partial<EdgeDisplayData> = { ...data, size: (data.size ?? 1) * display.linkThickness };
         if (focus && graph.hasNode(focus)) {
           if (graph.hasExtremity(edge, focus)) {
             res.color = "#9aa0a8";
@@ -116,8 +153,35 @@ export default function GraphView({ graph, selected, highlight, onSelect }: Prop
       },
     });
     sigmaRef.current = sigma;
+    sigma.setCustomBBox(sigma.getBBox());
+    layout.reheat(0.3);
 
-    sigma.on("clickNode", ({ node }) => onSelectRef.current(node));
+    // Drag nodes around; the layout follows, like in Obsidian.
+    let dragged: string | null = null;
+    let moved = false;
+    sigma.on("downNode", ({ node }) => {
+      dragged = node;
+      moved = false;
+    });
+    sigma.getMouseCaptor().on("mousemovebody", (e) => {
+      if (!dragged) return;
+      moved = true;
+      const pos = sigma.viewportToGraph(e);
+      layout.drag(dragged, pos.x, pos.y);
+      e.preventSigmaDefault();
+      e.original.preventDefault();
+      e.original.stopPropagation();
+    });
+    const release = () => {
+      if (dragged) layout.release(dragged);
+      dragged = null;
+    };
+    sigma.getMouseCaptor().on("mouseup", release);
+    sigma.getMouseCaptor().on("mouseleave", release);
+
+    sigma.on("clickNode", ({ node }) => {
+      if (!moved) onSelectRef.current(node);
+    });
     sigma.on("clickStage", () => onSelectRef.current(null));
     sigma.on("enterNode", ({ node }) => {
       state.current.hovered = node;
@@ -131,10 +195,24 @@ export default function GraphView({ graph, selected, highlight, onSelect }: Prop
     });
 
     return () => {
+      layout.stop();
       sigma.kill();
       sigmaRef.current = null;
+      layoutRef.current = null;
     };
   }, [graph]);
+
+  useEffect(() => {
+    layoutRef.current?.apply(forces);
+  }, [forces]);
+
+  useEffect(() => {
+    const sigma = sigmaRef.current;
+    if (!sigma) return;
+    sigma.setSetting("labelSize", display.labelSize);
+    sigma.setSetting("labelRenderedSizeThreshold", labelThreshold(display.textFade));
+    sigma.refresh();
+  }, [display]);
 
   useEffect(() => {
     state.current.selected = selected;
@@ -157,10 +235,33 @@ export default function GraphView({ graph, selected, highlight, onSelect }: Prop
     }
   }, [selected, highlight, graph]);
 
+  useImperativeHandle(handle, () => ({
+    animate: () => layoutRef.current?.reheat(1),
+    fit: () => refit(),
+    exportPng: async (whole) => {
+      const sigma = sigmaRef.current;
+      if (!sigma) return;
+      const bbox = sigma.getCustomBBox();
+      const { width, height } = sigma.getDimensions();
+      const scale = whole ? Math.max(1, 4000 / Math.max(width, height)) : 2;
+      await downloadAsPNG(sigma, {
+        fileName: whole ? "playlist-graph-full" : "playlist-graph-view",
+        backgroundColor: BACKGROUND,
+        width: Math.round(width * scale),
+        height: Math.round(height * scale),
+        cameraState: whole ? { x: 0.5, y: 0.5, ratio: 1, angle: 0 } : sigma.getCamera().getState(),
+        sigmaSettings: { labelSize: display.labelSize * scale, labelRenderedSizeThreshold: labelThreshold(display.textFade) },
+        withTempRenderer: (tmp) => {
+          if (!whole && bbox) tmp.setCustomBBox(bbox);
+        },
+      });
+    },
+  }));
+
   const zoom = (factor: number | null) => {
     const camera = sigmaRef.current?.getCamera();
     if (!camera) return;
-    if (factor === null) camera.animatedReset({ duration: 400 });
+    if (factor === null) refit();
     else if (factor > 1) camera.animatedUnzoom({ duration: 250, factor });
     else camera.animatedZoom({ duration: 250, factor: 1 / factor });
   };

@@ -48,6 +48,22 @@ const PLAYLISTS: [string, Record<string, number>, number][] = [
   ["Liked Mix", { indie: 0.2, pop: 0.2, electronic: 0.2, hiphop: 0.2, rock: 0.2 }, 90],
 ];
 
+// Extra playlists so the demo is closer to a real library in size.
+const MOODS = ["Chill", "Night", "Morning", "Workout", "Study", "Commute", "Cooking", "Weekend", "Vibes", "Mix"];
+function extraPlaylists(): [string, Record<string, number>, number][] {
+  const rand = rng(99);
+  const scenes = Object.keys(SCENES);
+  const out: [string, Record<string, number>, number][] = [];
+  for (let i = 0; i < 26; i++) {
+    const main = scenes[Math.floor(rand() * scenes.length)];
+    const side = scenes[Math.floor(rand() * scenes.length)];
+    const mix = main === side ? { [main]: 1 } : { [main]: 0.7, [side]: 0.3 };
+    const name = `${main[0].toUpperCase()}${main.slice(1)} ${MOODS[i % MOODS.length]}${i >= MOODS.length ? ` ${Math.floor(i / MOODS.length) + 1}` : ""}`;
+    out.push([name, mix, 20 + Math.floor(rand() * 60)]);
+  }
+  return out;
+}
+
 export function makeDemoLibrary(): { user: User; playlists: Playlist[] } {
   const rand = rng(42);
   const pick = <T,>(arr: T[]) => arr[Math.floor(rand() * arr.length)];
@@ -80,7 +96,7 @@ export function makeDemoLibrary(): { user: User; playlists: Playlist[] } {
   const weightedPick = (tracks: Track[]) =>
     tracks[Math.floor(Math.pow(rand(), 1.4) * tracks.length)];
 
-  const playlists: Playlist[] = PLAYLISTS.map(([name, mix, size], i) => {
+  const playlists: Playlist[] = [...PLAYLISTS, ...extraPlaylists()].map(([name, mix, size], i) => {
     const tracks: Track[] = [];
     const seen = new Set<string>();
     const scenes = Object.entries(mix);

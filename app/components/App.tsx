@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Playlist, PlaylistSummary, User } from "@/lib/types";
 import { clearCache, loadCachedPlaylists, saveCachedPlaylists } from "@/lib/cache";
-import { makeDemoLibrary } from "@/lib/demo";
+import { demoGenres, makeDemoLibrary } from "@/lib/demo";
+import type { LibraryExport } from "@/lib/export";
 import { analyze } from "@/lib/analysis";
 import Landing from "./Landing";
-import Dashboard from "./Dashboard";
+import Dashboard, { type Source } from "./Dashboard";
 
 type Phase =
   | { name: "checking" }
@@ -37,14 +38,25 @@ export default function App() {
   const [phase, setPhase] = useState<Phase>({ name: "checking" });
   const [user, setUser] = useState<User | null>(null);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
-  const [demo, setDemo] = useState(false);
+  const [source, setSource] = useState<Source>("spotify");
+  const [presetGenres, setPresetGenres] = useState<Map<string, string[]> | null>(null);
+  const demo = source !== "spotify";
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const startDemo = useCallback(() => {
     const lib = makeDemoLibrary();
     setUser(lib.user);
     setPlaylists(lib.playlists);
-    setDemo(true);
+    setPresetGenres(demoGenres());
+    setSource("demo");
+    setPhase({ name: "ready" });
+  }, []);
+
+  const openExport = useCallback((data: LibraryExport) => {
+    setUser(null);
+    setPlaylists(data.playlists);
+    setPresetGenres(new Map(Object.entries(data.artistGenres)));
+    setSource("file");
     setPhase({ name: "ready" });
   }, []);
 
@@ -124,7 +136,8 @@ export default function App() {
       await clearCache();
     }
     window.history.replaceState({}, "", "/");
-    setDemo(false);
+    setSource("spotify");
+    setPresetGenres(null);
     setUser(null);
     setPlaylists([]);
     setPhase({ name: "landing" });
@@ -163,8 +176,10 @@ export default function App() {
     <Dashboard
       library={library}
       user={user}
-      demo={demo}
+      source={source}
+      presetGenres={presetGenres}
       error={loadError}
+      onImport={openExport}
       onRefresh={demo ? undefined : () => loadLibrary(true)}
       onLogout={logout}
     />
