@@ -122,3 +122,24 @@ export function makeDemoLibrary(): { user: User; playlists: Playlist[] } {
 function slug(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 }
+
+const SCENE_GENRES: Record<string, string[][]> = {
+  indie: [["indie rock", "indie pop"], ["indie pop", "dream pop"], ["indie rock"]],
+  electronic: [["electronic", "house"], ["techno", "electronic"], ["electronic", "downtempo"]],
+  hiphop: [["hip hop", "rap"], ["hip hop", "trap"], ["rap"]],
+  jazz: [["jazz", "soul jazz"], ["jazz"], ["jazz", "bossa nova"]],
+  rock: [["rock", "classic rock"], ["alternative rock", "rock"], ["hard rock"]],
+  pop: [["pop", "dance pop"], ["pop", "synthpop"], ["pop"]],
+  ambient: [["ambient", "downtempo"], ["ambient", "neoclassical"], ["ambient"]],
+};
+
+/** Genres for the demo artists, shaped like the real genre lookup. */
+export function demoGenres(): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const [scene, artists] of Object.entries(SCENES)) {
+    artists.forEach((a, i) => {
+      out.set(`demo-artist-${slug(a)}`, SCENE_GENRES[scene][i % SCENE_GENRES[scene].length]);
+    });
+  }
+  return out;
+}

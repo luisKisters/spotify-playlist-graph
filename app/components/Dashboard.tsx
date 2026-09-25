@@ -2,19 +2,32 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Library } from "@/lib/analysis";
-import { buildGraph, playlistClusters, type GraphMode } from "@/lib/graph";
+import { genreProfile, type Library } from "@/lib/analysis";
+import {
+  GENRE_PREFIX,
+  buildGraph,
+  clusterColor,
+  genreClusters,
+  overlapClusters,
+  type ColorBy,
+  type Density,
+  type GraphMode,
+} from "@/lib/graph";
+import { demoGenres } from "@/lib/demo";
+import { loadGenres } from "@/lib/genres";
 import type { User } from "@/lib/types";
 import { Logo } from "./Landing";
 import Panel from "./Panel";
 
 const GraphView = dynamic(() => import("./GraphView"), { ssr: false });
 
-const MODES: { id: GraphMode; label: string; hint: string }[] = [
-  { id: "playlists", label: "Playlists", hint: "Linked by shared songs and artists" },
-  { id: "artists", label: "Artists", hint: "Artists that appear in 2+ playlists" },
-  { id: "songs", label: "Shared songs", hint: "Songs that appear in 2+ playlists" },
+const MODES: { id: GraphMode; label: string }[] = [
+  { id: "playlists", label: "Playlists" },
+  { id: "artists", label: "Artists" },
+  { id: "songs", label: "Songs" },
+  { id: "genres", label: "Genres" },
 ];
+const DENSITY_LABELS = ["Sparse", "Light", "Balanced", "Rich", "Dense"];
 
 interface Props {
   library: Library;
@@ -27,68 +40,156 @@ interface Props {
 
 export default function Dashboard({ library, user, demo, error, onRefresh, onLogout }: Props) {
   const [mode, setMode] = useState<GraphMode>("playlists");
+  const [density, setDensity] = useState<Density>(3);
+  const [colorBy, setColorBy] = useState<ColorBy>("overlap");
   const [selected, setSelected] = useState<string | null>(null);
+  const [focusCluster, setFocusCluster] = useState<number | null>(null);
   const [query, setQuery] = useState("");
 
-  const clusters = useMemo(() => playlistClusters(library), [library]);
-  const graph = useMemo(() => buildGraph(library, mode, clusters), [library, mode, clusters]);
+  // Genres are looked up lazily, the first time a genre feature is used.
+  const wantGenres = mode === "genres" || colorBy === "genre";
+  const [artistGenres, setArtistGenres] = useState<Map<string, string[]> | null>(null);
+  const [genreProgress, setGenreProgress] = useState<{ done: number; total: number } | null>(null);
+  const genresStarted = useRef(false);
+  useEffect(() => {
+    if (!wantGenres || genresStarted.current) return;
+    genresStarted.current = true;
+    if (demo) {
+      setArtistGenres(demoGenres());
+      return;
+    }
+    const controller = new AbortController();
+    loadGenres(
+      library,
+      (genres, done, total) => {
+        setArtistGenres(genres);
+        setGenreProgress({ done, total });
+      },
+      controller.signal
+    ).finally(() => setGenreProgress((p) => (p ? { ...p, total: p.done } : p)));
+    return () => {
+      controller.abort();
+      genresStarted.current = false;
+    };
+  }, [wantGenres, demo, library]);
 
-  const results = useMemo(() => search(library, query), [library, query]);
+  const genres = useMemo(
+    () => (artistGenres ? genreProfile(library, artistGenres) : null),
+    [library, artistGenres]
+  );
+  const overlap = useMemo(() => overlapClusters(library), [library]);
+  const clusters = useMemo(
+    () => (colorBy === "genre" && genres?.ranked.length ? genreClusters(library, genres) : overlap),
+    [colorBy, genres, library, overlap]
+  );
+  const graph = useMemo(
+    () => buildGraph(library, mode, density, clusters, genres),
+    [library, mode, density, clusters, genres]
+  );
+
+  const results = useMemo(() => search(library, genres, query), [library, genres, query]);
 
   // Dim everything except the search hits (and the playlists they live in),
-  // or the playlists of a selected song/artist that isn't drawn in this view.
+  // the focused cluster, or the playlists of a selection not drawn in this view.
   const highlight = useMemo(() => {
     const ids = new Set<string>();
     const add = (id: string) => {
       ids.add(id);
       library.tracks.get(id)?.playlists.forEach((p) => ids.add(p));
       library.artists.get(id)?.playlists.forEach((_, p) => ids.add(p));
+      genres?.byName.get(id.slice(GENRE_PREFIX.length))?.playlists.forEach((_, p) => ids.add(p));
     };
     if (query.trim()) results.forEach((r) => add(r.id));
-    else if (selected && !graph.hasNode(selected)) add(selected);
+    else if (focusCluster !== null) {
+      clusters.of.forEach((c, pid) => c === focusCluster && ids.add(pid));
+      if (colorBy === "genre") ids.add(GENRE_PREFIX + clusters.labels[focusCluster]);
+    } else if (selected && !graph.hasNode(selected)) add(selected);
     return ids.size ? ids : null;
-  }, [query, results, selected, graph, library]);
+  }, [query, results, focusCluster, clusters, colorBy, selected, graph, library, genres]);
 
   const select = (id: string | null) => {
     setSelected(id);
     setQuery("");
+    setFocusCluster(null);
   };
+
+  const genresLoading = wantGenres && !demo && (!genreProgress || genreProgress.done < genreProgress.total);
+  const genreStatus = !wantGenres
+    ? null
+    : genresLoading
+      ? `Looking up genres${genreProgress ? ` ${genreProgress.done}/${genreProgress.total}` : "…"}`
+      : genres && genres.ranked.length === 0
+        ? "No genre data found"
+        : null;
+
+  const legend = clusters.labels
+    .map((label, i) => ({ label, i }))
+    .filter(({ i }) => [...clusters.of.values()].includes(i));
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex flex-wrap items-center gap-3 border-b border-line bg-panel px-4 py-3">
-        <div className="flex items-center gap-2 text-sm font-semibold text-white">
+      <header className="flex items-center gap-3 border-b border-line px-4 py-2.5">
+        <div className="flex shrink-0 items-center gap-2 text-sm font-semibold text-white">
           <Logo />
           <span className="hidden sm:inline">Playlist Graph</span>
-          {demo && (
-            <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[11px] font-medium text-accent">
-              Demo
-            </span>
-          )}
         </div>
-
-        <nav className="order-last flex w-full rounded-full bg-raised p-1 md:order-none md:w-auto">
-          {MODES.map((m) => (
-            <button
-              key={m.id}
-              title={m.hint}
-              onClick={() => setMode(m.id)}
-              className={`flex-1 rounded-full px-3.5 py-1.5 text-xs font-medium transition md:flex-none ${
-                mode === m.id ? "bg-white text-black" : "text-zinc-400 hover:text-white"
-              }`}
-            >
-              {m.label}
-            </button>
-          ))}
-        </nav>
-
         <SearchBox query={query} setQuery={setQuery} results={results} onPick={select} />
-
-        <UserMenu user={user} demo={demo} onRefresh={onRefresh} onLogout={onLogout} />
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          {demo ? (
+            <a href="/api/auth/login" className="px-2 py-1.5 text-xs font-medium text-accent hover:underline">
+              Connect Spotify
+            </a>
+          ) : (
+            onRefresh && (
+              <button onClick={onRefresh} className="rounded-md px-2 py-1.5 text-xs text-zinc-400 hover:bg-white/5 hover:text-white">
+                Refresh
+              </button>
+            )
+          )}
+          <button
+            onClick={onLogout}
+            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-zinc-400 hover:bg-white/5 hover:text-white"
+          >
+            {user?.image && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={user.image} alt="" className="h-5 w-5 rounded-full object-cover" />
+            )}
+            {demo ? "Exit demo" : "Log out"}
+          </button>
+        </div>
       </header>
 
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-line px-4 py-2 text-xs">
+        <Segmented options={MODES} value={mode} onChange={(m) => { setMode(m); setFocusCluster(null); }} />
+        <label className="flex items-center gap-2 text-zinc-400">
+          Density
+          <input
+            type="range"
+            min={1}
+            max={5}
+            step={1}
+            value={density}
+            onChange={(e) => setDensity(Number(e.target.value) as Density)}
+            className="w-24 accent-[var(--color-accent)] focus:outline-none"
+          />
+          <span className="w-14 text-zinc-300">{DENSITY_LABELS[density - 1]}</span>
+        </label>
+        <div className="flex items-center gap-2 text-zinc-400">
+          Color by
+          <Segmented
+            options={[
+              { id: "overlap" as ColorBy, label: "Overlap" },
+              { id: "genre" as ColorBy, label: "Genre" },
+            ]}
+            value={colorBy}
+            onChange={(c) => { setColorBy(c); setFocusCluster(null); }}
+          />
+        </div>
+        {genreStatus && <span className="text-zinc-500">{genreStatus}</span>}
+      </div>
+
       {error && (
-        <div className="border-b border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300">
+        <div className="border-b border-line px-4 py-2 text-xs text-red-300">
           Couldn't load everything from Spotify: {error}
           {onRefresh && (
             <button onClick={onRefresh} className="ml-2 underline">
@@ -101,56 +202,109 @@ export default function Dashboard({ library, user, demo, error, onRefresh, onLog
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <div className="relative h-[55vh] shrink-0 lg:h-auto lg:flex-1">
           {library.playlists.size === 0 ? (
-            <div className="grid h-full place-items-center px-6 text-center text-zinc-400">
-              No playlists of your own yet. Create one on Spotify, then hit Refresh.
+            <div className="grid h-full place-items-center px-6 text-center text-sm text-zinc-400">
+              No playlists of your own yet. Create one on Spotify, then refresh.
             </div>
           ) : (
             <GraphView
               graph={graph}
-              selected={query.trim() ? null : selected}
+              selected={query.trim() || focusCluster !== null ? null : selected}
               highlight={highlight}
-              onSelect={setSelected}
+              onSelect={select}
             />
           )}
-          <p className="pointer-events-none absolute right-4 top-3 hidden text-xs text-zinc-500 sm:block">
-            {MODES.find((m) => m.id === mode)!.hint} · click a node for details
-          </p>
+          {mode === "genres" && !genres?.ranked.length && (
+            <div className="pointer-events-none absolute inset-x-0 top-4 text-center text-xs text-zinc-400">
+              {genreStatus ?? "Loading genres…"}
+            </div>
+          )}
+          {legend.length > 1 && (
+            <ul className="absolute bottom-4 right-4 hidden max-w-56 space-y-0.5 rounded-lg border border-line bg-canvas/85 p-2 text-xs backdrop-blur md:block">
+              {legend.map(({ label, i }) => (
+                <li key={i}>
+                  <button
+                    onClick={() => setFocusCluster(focusCluster === i ? null : i)}
+                    className={`flex w-full items-center gap-2 rounded px-1.5 py-1 text-left hover:bg-white/5 ${
+                      focusCluster !== null && focusCluster !== i ? "opacity-40" : ""
+                    }`}
+                  >
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: clusterColor(i) }} />
+                    <span className="truncate text-zinc-300">{label}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-        <aside className="scrollbar-thin min-h-0 flex-1 overflow-y-auto border-t border-line bg-panel lg:w-[400px] lg:flex-none lg:border-l lg:border-t-0">
-          <Panel library={library} clusters={clusters} selected={selected} onSelect={select} />
+        <aside className="scrollbar-thin min-h-0 flex-1 overflow-y-auto border-t border-line lg:w-[380px] lg:flex-none lg:border-l lg:border-t-0">
+          <Panel
+            library={library}
+            clusters={clusters}
+            genres={genres}
+            selected={selected}
+            onSelect={select}
+          />
         </aside>
       </div>
     </div>
   );
 }
 
+function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { id: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="flex rounded-md bg-raised p-0.5">
+      {options.map((o) => (
+        <button
+          key={o.id}
+          onClick={() => onChange(o.id)}
+          className={`rounded px-2.5 py-1 font-medium transition ${
+            value === o.id ? "bg-white/10 text-white" : "text-zinc-500 hover:text-zinc-200"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 interface Result {
   id: string;
-  kind: "playlist" | "artist" | "track";
+  kind: "playlist" | "artist" | "song" | "genre";
   label: string;
   sub: string;
 }
 
-function search(lib: Library, query: string): Result[] {
+function search(
+  lib: Library,
+  genres: ReturnType<typeof genreProfile> | null,
+  query: string
+): Result[] {
   const q = query.trim().toLowerCase();
   if (q.length < 2) return [];
   const out: Result[] = [];
   for (const p of lib.playlists.values())
     if (p.name.toLowerCase().includes(q))
       out.push({ id: p.id, kind: "playlist", label: p.name, sub: `${p.tracks.length} songs` });
+  for (const g of genres?.ranked ?? [])
+    if (g.name.includes(q))
+      out.push({ id: GENRE_PREFIX + g.name, kind: "genre", label: g.name, sub: `${g.tracks} songs` });
   for (const a of lib.artists.values())
     if (a.artist.name.toLowerCase().includes(q))
-      out.push({
-        id: a.artist.id,
-        kind: "artist",
-        label: a.artist.name,
-        sub: `in ${a.playlists.size} playlist${a.playlists.size === 1 ? "" : "s"}`,
-      });
+      out.push({ id: a.artist.id, kind: "artist", label: a.artist.name, sub: `${a.playlists.size} playlists` });
   for (const t of lib.tracks.values())
     if (t.track.name.toLowerCase().includes(q))
       out.push({
         id: t.track.id,
-        kind: "track",
+        kind: "song",
         label: t.track.name,
         sub: t.track.artists.map((a) => a.name).join(", "),
       });
@@ -179,8 +333,13 @@ function SearchBox({
     return () => document.removeEventListener("mousedown", close);
   }, []);
 
+  const pick = (id: string) => {
+    onPick(id);
+    setOpen(false);
+  };
+
   return (
-    <div ref={ref} className="relative order-last w-full md:order-none md:w-auto md:max-w-sm md:flex-1">
+    <div ref={ref} className="relative min-w-0 flex-1 md:mx-auto md:max-w-md">
       <input
         value={query}
         onChange={(e) => {
@@ -190,87 +349,26 @@ function SearchBox({
         onFocus={() => setOpen(true)}
         onKeyDown={(e) => {
           if (e.key === "Escape") setQuery("");
-          if (e.key === "Enter" && results[0]) {
-            onPick(results[0].id);
-            setOpen(false);
-          }
+          if (e.key === "Enter" && results[0]) pick(results[0].id);
         }}
-        placeholder="Search playlists, artists, songs"
-        className="w-full rounded-full border border-line bg-raised px-4 py-2 text-sm text-white placeholder:text-zinc-500 focus:border-accent/60 focus:outline-none"
+        placeholder="Search"
+        className="w-full rounded-md border border-line bg-raised px-3 py-1.5 text-sm text-white placeholder:text-zinc-500 focus:border-white/25 focus:outline-none"
       />
       {open && results.length > 0 && (
-        <ul className="scrollbar-thin absolute left-0 right-0 top-full z-20 mt-2 max-h-80 overflow-y-auto rounded-xl border border-line bg-raised p-1 shadow-2xl">
+        <ul className="scrollbar-thin absolute left-0 right-0 top-full z-20 mt-1 max-h-80 overflow-y-auto rounded-md border border-line bg-raised p-1 shadow-xl">
           {results.map((r) => (
             <li key={r.kind + r.id}>
               <button
-                onClick={() => {
-                  onPick(r.id);
-                  setOpen(false);
-                }}
-                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-white/5"
+                onClick={() => pick(r.id)}
+                className="flex w-full items-baseline gap-3 rounded px-2 py-1.5 text-left hover:bg-white/5"
               >
-                <span className="w-14 shrink-0 text-[10px] uppercase tracking-wide text-zinc-500">
-                  {r.kind === "track" ? "song" : r.kind}
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-sm text-white">{r.label}</span>
-                  <span className="block truncate text-xs text-zinc-500">{r.sub}</span>
-                </span>
+                <span className="min-w-0 flex-1 truncate text-sm text-white">{r.label}</span>
+                <span className="shrink-0 text-xs text-zinc-500">{r.kind}</span>
               </button>
             </li>
           ))}
         </ul>
       )}
-    </div>
-  );
-}
-
-function UserMenu({
-  user,
-  demo,
-  onRefresh,
-  onLogout,
-}: {
-  user: User | null;
-  demo: boolean;
-  onRefresh?: () => void;
-  onLogout: () => void;
-}) {
-  return (
-    <div className="ml-auto flex items-center gap-2">
-      {onRefresh && (
-        <button
-          onClick={onRefresh}
-          title="Reload everything from Spotify"
-          className="rounded-full border border-line px-3 py-1.5 text-xs text-zinc-300 transition hover:bg-white/5 hover:text-white"
-        >
-          Refresh
-        </button>
-      )}
-      {demo ? (
-        <a
-          href="/api/auth/login"
-          className="rounded-full bg-accent px-3 py-1.5 text-xs font-semibold text-black hover:bg-accent-strong"
-        >
-          <span className="sm:hidden">Connect</span>
-          <span className="hidden sm:inline">Use my Spotify</span>
-        </a>
-      ) : null}
-      <button
-        onClick={onLogout}
-        title={demo ? "Leave demo" : "Log out"}
-        className="flex items-center gap-2 rounded-full border border-line py-1 pl-1 pr-3 text-xs text-zinc-300 transition hover:bg-white/5 hover:text-white"
-      >
-        {user?.image ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={user.image} alt="" className="h-6 w-6 rounded-full object-cover" />
-        ) : (
-          <span className="grid h-6 w-6 place-items-center rounded-full bg-white/10 text-[11px] font-semibold">
-            {user?.name?.[0]?.toUpperCase() ?? "?"}
-          </span>
-        )}
-        {demo ? "Exit" : "Log out"}
-      </button>
     </div>
   );
 }

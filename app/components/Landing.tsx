@@ -1,10 +1,10 @@
-import { CLUSTER_COLORS } from "@/lib/graph";
+import { PALETTE } from "@/lib/graph";
 
 const FEATURES = [
-  ["Overlap map", "Playlists that share songs and artists pull together, so you see which ones are really the same vibe."],
-  ["Taste clusters", "Similar playlists are grouped and coloured automatically."],
-  ["Duplicates", "Find songs added twice and different versions of the same song in one playlist."],
-  ["Shared artists", "See which artists and songs connect otherwise different playlists."],
+  "Which playlists overlap, and by how much",
+  "Clusters by shared songs or by genre",
+  "Songs added twice, or in two versions",
+  "Artists and songs that tie playlists together",
 ];
 
 // Decorative mini-graph for the hero.
@@ -28,9 +28,8 @@ export default function Landing({ error, onDemo }: { error?: string; onDemo: () 
 
       <section className="mt-12 grid items-center gap-10 md:mt-20 md:grid-cols-[1.1fr_1fr]">
         <div>
-          <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-            See how your playlists
-            <span className="text-accent"> connect.</span>
+          <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+            See how your playlists connect
           </h1>
           <p className="mt-4 max-w-md text-base leading-relaxed text-zinc-400">
             Map your Spotify playlists by the songs and artists they share. Spot
@@ -46,13 +45,13 @@ export default function Landing({ error, onDemo }: { error?: string; onDemo: () 
           <div className="mt-8 flex flex-wrap gap-3">
             <a
               href="/api/auth/login"
-              className="inline-flex items-center gap-2 rounded-full bg-accent px-6 py-3 text-sm font-semibold text-black transition hover:bg-accent-strong"
+              className="inline-flex items-center gap-2 rounded-md bg-accent px-5 py-2.5 text-sm font-semibold text-black transition hover:bg-accent-strong"
             >
               Connect Spotify
             </a>
             <button
               onClick={onDemo}
-              className="rounded-full border border-white/15 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/5"
+              className="rounded-md border border-white/15 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/5"
             >
               Try the demo
             </button>
@@ -75,19 +74,19 @@ export default function Landing({ error, onDemo }: { error?: string; onDemo: () 
             />
           ))}
           {DOTS.map(([x, y, r, c], i) => (
-            <circle key={i} cx={x} cy={y} r={r} fill={CLUSTER_COLORS[c]} opacity={0.9} />
+            <circle key={i} cx={x} cy={y} r={r} fill={PALETTE[c]} opacity={0.9} />
           ))}
         </svg>
       </section>
 
-      <section className="mt-16 grid gap-4 sm:grid-cols-2 md:mt-24 lg:grid-cols-4">
-        {FEATURES.map(([title, text]) => (
-          <div key={title} className="rounded-2xl border border-line bg-panel p-5">
-            <h2 className="text-sm font-semibold text-white">{title}</h2>
-            <p className="mt-2 text-sm leading-relaxed text-zinc-400">{text}</p>
-          </div>
+      <ul className="mt-16 grid gap-x-10 gap-y-3 border-t border-line pt-8 text-sm text-zinc-400 sm:grid-cols-2 md:mt-24">
+        {FEATURES.map((f) => (
+          <li key={f} className="flex gap-3">
+            <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-zinc-500" />
+            {f}
+          </li>
         ))}
-      </section>
+      </ul>
     </main>
   );
 }

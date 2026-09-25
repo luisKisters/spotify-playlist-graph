@@ -8,13 +8,15 @@ export async function GET() {
   try {
     const me = await spotifyGet<{ id: string }>("/me");
     const playlists: PlaylistSummary[] = [];
+    const seen = new Set<string>();
     let next: string | null = "/me/playlists?limit=50";
 
     while (next) {
       const page: any = await spotifyGet(next);
       for (const p of page.items ?? []) {
-        if (!p) continue;
+        if (!p || seen.has(p.id)) continue;
         if (p.owner?.id !== me.id && !p.collaborative) continue;
+        seen.add(p.id);
         playlists.push({
           id: p.id,
           name: p.name || "Untitled playlist",

@@ -49,8 +49,10 @@ const normalizeTitle = (s: string) =>
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 
-export function analyze(playlists: Playlist[]): Library {
-  const byId = new Map(playlists.map((p) => [p.id, p]));
+export function analyze(input: Playlist[]): Library {
+  // Spotify can list the same playlist twice; count each one once.
+  const byId = new Map(input.map((p) => [p.id, p]));
+  const playlists = [...byId.values()];
   const tracks = new Map<string, TrackInfo>();
   const artists = new Map<string, ArtistInfo>();
   const playlistArtists = new Map<string, Map<string, number>>();
@@ -181,4 +183,78 @@ export function formatDuration(ms: number) {
   const mins = Math.round(ms / 60000);
   if (mins < 60) return `${mins} min`;
   return `${Math.floor(mins / 60)} h ${mins % 60} min`;
+}
+
+export interface GenreInfo {
+  name: string;
+  /** number of distinct tracks tagged with this genre */
+  tracks: number;
+  /** playlist id -> tracks in that playlist tagged with this genre */
+  playlists: Map<string, number>;
+  artists: Set<string>;
+}
+
+export interface GenreProfile {
+  byName: Map<string, GenreInfo>;
+  /** Genres by number of tracks, most common first. */
+  ranked: GenreInfo[];
+  /** playlist id -> its most common genre */
+  dominant: Map<string, string>;
+  /** Fraction of artists that have genre data. */
+  coverage: number;
+}
+
+/** Aggregates per-artist genres into per-playlist and per-genre stats. */
+export function genreProfile(
+  lib: Library,
+  artistGenres: Map<string, string[]>
+): GenreProfile {
+  const byName = new Map<string, GenreInfo>();
+  const get = (name: string) => {
+    let info = byName.get(name);
+    if (!info) {
+      info = { name, tracks: 0, playlists: new Map(), artists: new Set() };
+      byName.set(name, info);
+    }
+    return info;
+  };
+
+  for (const { track, playlists } of lib.tracks.values()) {
+    const genres = new Set<string>();
+    for (const a of track.artists) {
+      for (const g of artistGenres.get(a.id) ?? []) {
+        genres.add(g);
+        get(g).artists.add(a.id);
+      }
+    }
+    for (const g of genres) {
+      const info = get(g);
+      info.tracks++;
+      for (const pid of playlists) info.playlists.set(pid, (info.playlists.get(pid) ?? 0) + 1);
+    }
+  }
+
+  const ranked = [...byName.values()].sort((a, b) => b.tracks - a.tracks);
+  const dominant = new Map<string, string>();
+  for (const pid of lib.playlists.keys()) {
+    let best: GenreInfo | null = null;
+    for (const info of ranked) {
+      const n = info.playlists.get(pid) ?? 0;
+      if (n && (!best || n > (best.playlists.get(pid) ?? 0))) best = info;
+    }
+    if (best) dominant.set(pid, best.name);
+  }
+
+  let covered = 0;
+  for (const id of lib.artists.keys()) if (artistGenres.get(id)?.length) covered++;
+
+  return { byName, ranked, dominant, coverage: lib.artists.size ? covered / lib.artists.size : 0 };
+}
+
+export function playlistGenres(profile: GenreProfile, playlistId: string, limit = 6) {
+  return profile.ranked
+    .map((g) => ({ name: g.name, count: g.playlists.get(playlistId) ?? 0 }))
+    .filter((g) => g.count > 0)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit);
 }

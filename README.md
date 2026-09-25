@@ -11,9 +11,10 @@ no Spotify account needed for the demo (`/?demo`).
 ## Features
 
 - **Playlist map**: playlists are linked by shared songs and artists and
-  automatically grouped into colour-coded taste clusters.
-- **Artists / Shared songs views**: see which artists and tracks bridge your
-  playlists.
+  grouped into clusters, coloured either by overlap or by dominant genre.
+- **Artists / Songs / Genres views**: see which artists, tracks and genres
+  bridge your playlists.
+- **Density control** from sparse to dense for every view.
 - **Details panel**: closest playlists with the exact songs they share, top
   artists, how much of a playlist is unique, duplicates and alternate versions.
 - **Search** across playlists, artists and songs.
@@ -28,8 +29,10 @@ no Spotify account needed for the demo (`/?demo`).
 - Scopes: `playlist-read-private playlist-read-collaborative` (read-only).
 - Uses the post-February-2026 Web API (`/playlists/{id}/items`). Spotify only
   lets Development Mode apps read playlists the user owns or collaborates on,
-  and no longer returns artist genres, so the graph is built from song and
-  artist overlap.
+  and no longer returns artist genres. Genres are looked up from Last.fm tags
+  when `LASTFM_API_KEY` is set (free key at https://www.last.fm/api/account/create,
+  fast), otherwise from MusicBrainz (no key, about one artist per second).
+  Results are cached in the browser for 30 days.
 - Graph rendering: [sigma.js](https://www.sigmajs.org/) (WebGL) + graphology
   (ForceAtlas2 layout, Louvain clustering).
 
@@ -45,6 +48,8 @@ no Spotify account needed for the demo (`/?demo`).
    SPOTIFY_CLIENT_ID=your_client_id
    SPOTIFY_CLIENT_SECRET=your_client_secret
    BASE_URL=http://127.0.0.1:3000
+   # optional, makes genre lookup much faster
+   LASTFM_API_KEY=your_lastfm_key
    ```
 
 3. Run it:
