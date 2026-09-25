@@ -1,68 +1,64 @@
-# 🎵 Spotify Playlist Graph
+# Playlist Graph
 
 [![Vercel](https://vercelbadge.vercel.app/api/luiskisters/spotify-playlist-graph)](https://spotify-playlist-graph.vercel.app)
 
-**Visualize your Spotify playlists as an interactive network graph. Explore how your playlists, tracks, artists, and genres connect!**
+See how your Spotify playlists connect: which ones overlap, which artists and
+songs tie them together, and where you've added the same song twice.
 
----
+Live: [spotify-playlist-graph.vercel.app](https://spotify-playlist-graph.vercel.app) ·
+no Spotify account needed for the demo (`/?demo`).
 
-## ✨ Features
+## Features
 
-- **Spotify Login:** Securely authenticate with your Spotify account.
-- **Playlist Graph:** Visualize playlists, tracks, artists, and genres as a network.
-- **Genre & Artist Insights:** See how your music taste connects across genres and artists.
-- **Node Distance Control:** Adjust the spacing between nodes in the graph interactively.
-- **Caching:** Data is cached locally for fast reloads.
+- **Playlist map**: playlists are linked by shared songs and artists and
+  automatically grouped into colour-coded taste clusters.
+- **Artists / Shared songs views**: see which artists and tracks bridge your
+  playlists.
+- **Details panel**: closest playlists with the exact songs they share, top
+  artists, how much of a playlist is unique, duplicates and alternate versions.
+- **Search** across playlists, artists and songs.
+- **Fast reloads**: playlists are cached in IndexedDB and only re-fetched when
+  Spotify reports a change (snapshot id).
+- **Demo mode** with generated data.
 
-## 🚀 Demo
+## How it works
 
-Check out the live app: [spotify-playlist-graph.vercel.app](https://spotify-playlist-graph.vercel.app)
+- Spotify login uses the authorization code flow. Tokens live in httpOnly
+  cookies and are refreshed automatically on the server.
+- Scopes: `playlist-read-private playlist-read-collaborative` (read-only).
+- Uses the post-February-2026 Web API (`/playlists/{id}/items`). Spotify only
+  lets Development Mode apps read playlists the user owns or collaborates on,
+  and no longer returns artist genres, so the graph is built from song and
+  artist overlap.
+- Graph rendering: [sigma.js](https://www.sigmajs.org/) (WebGL) + graphology
+  (ForceAtlas2 layout, Louvain clustering).
 
-## 🛠️ Getting Started
+## Development
 
-### 1. Clone the repository
+1. Create an app in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
+   and add the redirect URI `http://127.0.0.1:3000/api/auth/callback`
+   (Spotify doesn't accept `localhost`). In Development Mode, add every
+   account that should be able to log in under **User Management**.
+2. Create `.env.local`:
 
-```bash
-git clone https://github.com/luiskisters/spotify-playlist-graph.git
-cd spotify-playlist-graph
-```
+   ```env
+   SPOTIFY_CLIENT_ID=your_client_id
+   SPOTIFY_CLIENT_SECRET=your_client_secret
+   BASE_URL=http://127.0.0.1:3000
+   ```
 
-### 2. Install dependencies
+3. Run it:
 
-```bash
-pnpm install # or npm install or yarn install
-```
+   ```bash
+   pnpm install
+   pnpm dev
+   ```
 
-### 3. Set up environment variables
+   Open http://127.0.0.1:3000.
 
-Create a `.env.local` file in the root directory with the following variables:
+## Deployment (Vercel)
 
-```env
-SPOTIFY_CLIENT_ID=your_spotify_client_id
-SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
-BASE_URL=http://localhost:3000
-```
-
-- Get your Spotify credentials from the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/applications).
-- Set `BASE_URL` to your local dev URL or your deployed URL on Vercel.
-
-### 4. Run the development server
-
-```bash
-pnpm dev # or npm run dev or yarn dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-## ☁️ Deployment
-
-This app is ready to deploy on [Vercel](https://vercel.com/). Just set the same environment variables in your Vercel project settings.
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new?repo=https://github.com/luiskisters/spotify-playlist-graph)
-
----
-
-**Short repo description:**  
-Visualize your Spotify playlists, tracks, artists, and genres as an interactive network graph.
-
-Let me know if you want this written directly to your README.md or need any more tweaks!
+Set the same three environment variables in the Vercel project, with
+`BASE_URL` set to the production URL (e.g. `https://spotify-playlist-graph.vercel.app`),
+and register `${BASE_URL}/api/auth/callback` as a redirect URI in the Spotify
+dashboard. If `BASE_URL` is unset, the request origin is used.
