@@ -19,6 +19,8 @@ export interface DisplaySettings {
   /** Like Obsidian: higher shows labels earlier when zooming, -3..3 */
   textFade: number;
   labelSize: number;
+  /** Colour links by the cluster they belong to instead of plain grey */
+  tintLinks: boolean;
 }
 
 export interface GraphSettings extends ForceSettings, DisplaySettings {
@@ -38,27 +40,30 @@ export interface GraphSettings extends ForceSettings, DisplaySettings {
 
 export const MAX_NODES = 3000;
 
+/** The "Galaxy" look: every song, in islands of taste. */
 export const DEFAULT_SETTINGS: GraphSettings = {
-  mode: "playlists",
+  mode: "songs",
   clusterBy: "smart",
-  linksPerNode: 3,
+  linksPerNode: 4,
   minSimilarity: 0.04,
-  minPlaylists: 2,
-  maxNodes: 300,
+  minPlaylists: 1,
+  maxNodes: MAX_NODES,
   filter: "",
   orphans: true,
   nodeSize: 1,
-  linkThickness: 1,
+  linkThickness: 0.7,
   textFade: 0,
   labelSize: 12,
-  centerForce: 0.3,
+  tintLinks: true,
+  centerForce: 0.15,
   repelForce: 8,
-  linkForce: 0.6,
-  linkDistance: 120,
-  clusterForce: 0.3,
+  linkForce: 0.5,
+  linkDistance: 90,
+  clusterForce: 0.9,
 };
 
-const KEY = "graph-settings-v1";
+// v2: forces are now scale-aware, so values saved for the old layout don't carry over.
+const KEY = "graph-settings-v2";
 
 export function loadSettings(): GraphSettings {
   try {

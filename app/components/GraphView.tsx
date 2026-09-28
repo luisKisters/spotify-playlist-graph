@@ -23,12 +23,14 @@ interface Props {
   /** Nodes matching the current search; everything else is dimmed. */
   highlight: Set<string> | null;
   onSelect: (id: string | null) => void;
+  /** Called when the layout starts or stops moving. */
+  onSettling?: (settling: boolean) => void;
   handle?: Ref<GraphHandle>;
 }
 
-const BACKGROUND = "#0b0d10";
-const DIM_NODE = "#2a2f36";
-const DIM_EDGE = "#121419";
+const BACKGROUND = "#07080a";
+const DIM_NODE = "#1f2228";
+const DIM_EDGE = "#0f1114";
 let fontFamily = "system-ui, sans-serif";
 
 function drawHover(
@@ -61,7 +63,7 @@ function drawHover(
 /** Obsidian-style text fade: higher values show labels at smaller zoom. */
 const labelThreshold = (textFade: number) => Math.max(0, 6 - textFade * 2);
 
-export default function GraphView({ graph, forces, display, selected, highlight, onSelect, handle }: Props) {
+export default function GraphView({ graph, forces, display, selected, highlight, onSelect, onSettling, handle }: Props) {
   const container = useRef<HTMLDivElement>(null);
   const sigmaRef = useRef<Sigma | null>(null);
   const layoutRef = useRef<ForceLayout | null>(null);
@@ -71,43 +73,75 @@ export default function GraphView({ graph, forces, display, selected, highlight,
   onSelectRef.current = onSelect;
   const forcesRef = useRef(forces);
   forcesRef.current = forces;
+  const onSettlingRef = useRef(onSettling);
+  onSettlingRef.current = onSettling;
+  const settlingRef = useRef(false);
+  const setSettling = (v: boolean) => {
+    if (settlingRef.current === v) return;
+    settlingRef.current = v;
+    onSettlingRef.current?.(v);
+  };
 
-  // Freeze the coordinate frame so spreading nodes apart actually looks spread
-  // out, instead of sigma rescaling everything back to fit the screen.
+  // While the layout unfolds, the view follows it. Once it settles (or the
+  // user pans or zooms), the frame is frozen, so spreading nodes apart
+  // actually looks spread out instead of sigma rescaling it to fit.
+  const autoFit = useRef(true);
+  const freeze = () => {
+    const sigma = sigmaRef.current;
+    if (!sigma || !autoFit.current) return;
+    autoFit.current = false;
+    sigma.setCustomBBox(sigma.getBBox());
+  };
   const refit = (animate = true) => {
     const sigma = sigmaRef.current;
     if (!sigma) return;
+    autoFit.current = true;
     sigma.setCustomBBox(null);
     sigma.refresh();
-    sigma.setCustomBBox(sigma.getBBox());
     if (animate) sigma.getCamera().animatedReset({ duration: 400 });
     else sigma.getCamera().setState({ x: 0.5, y: 0.5, ratio: 1, angle: 0 });
+    if (!layoutRef.current?.settling) freeze();
   };
 
   useEffect(() => {
     if (!container.current) return;
     const smallGraph = graph.order <= 120;
+    const bigGraph = graph.order > 1500;
+    // Shrink nodes as the graph grows, so thousands of songs read as a
+    // cloud at full view instead of overlapping blobs. Zooming in grows them.
+    const autoSize =
+      Math.min(1, Math.max(0.45, Math.sqrt(500 / graph.order) * 1.3)) *
+      Math.min(1, Math.sqrt(container.current.clientWidth / 1100));
     fontFamily = getComputedStyle(document.body).fontFamily || fontFamily;
+    autoFit.current = true;
 
-    const layout = new ForceLayout(graph, forcesRef.current);
-    layoutRef.current = layout;
+    // Sigma needs coordinates up front; the worker replaces them right away.
+    graph.updateEachNodeAttributes((_, a) => {
+      if (typeof a.x !== "number") {
+        a.x = Math.random();
+        a.y = Math.random();
+      }
+      return a;
+    });
 
     const d = state.current.display;
     const sigma = new Sigma(graph, container.current, {
-      labelColor: { color: "#d1d5db" },
+      labelColor: { color: "#d4d4d8" },
       labelFont: fontFamily,
       labelWeight: "500",
       labelSize: d.labelSize,
-      labelDensity: 0.6,
+      labelDensity: bigGraph ? 0.35 : 0.6,
+      labelGridCellSize: bigGraph ? 140 : 100,
       labelRenderedSizeThreshold: labelThreshold(d.textFade),
       zIndex: true,
       defaultDrawNodeHover: drawHover,
-      minCameraRatio: 0.02,
+      hideEdgesOnMove: graph.size > 20000,
+      minCameraRatio: 0.01,
       maxCameraRatio: 8,
-      stagePadding: 40,
+      stagePadding: 88,
       nodeReducer: (node, data) => {
         const { selected, highlight, hovered, display } = state.current;
-        const res: Partial<NodeDisplayData> = { ...data, size: data.size * display.nodeSize };
+        const res: Partial<NodeDisplayData> = { ...data, size: data.size * display.nodeSize * autoSize };
         const kind = graph.getNodeAttribute(node, "kind");
         if (kind === "playlist" && smallGraph) res.forceLabel = true;
 
@@ -138,11 +172,13 @@ export default function GraphView({ graph, forces, display, selected, highlight,
         const { selected, highlight, hovered, display } = state.current;
         const focus = hovered ?? selected;
         const res: Partial<EdgeDisplayData> = { ...data, size: (data.size ?? 1) * display.linkThickness };
+        if (display.tintLinks) res.color = graph.getEdgeAttribute(edge, "tint") ?? data.color;
         if (focus && graph.hasNode(focus)) {
           if (graph.hasExtremity(edge, focus)) {
-            res.color = "#9aa0a8";
+            res.color = "#a1a1aa";
             res.zIndex = 2;
           } else {
+            res.hidden = graph.size > 3000;
             res.color = DIM_EDGE;
           }
         } else if (highlight) {
@@ -153,8 +189,18 @@ export default function GraphView({ graph, forces, display, selected, highlight,
       },
     });
     sigmaRef.current = sigma;
-    sigma.setCustomBBox(sigma.getBBox());
-    layout.reheat(0.3);
+
+    setSettling(true);
+    const layout = new ForceLayout(graph, forcesRef.current, (done) => {
+      setSettling(!done);
+      if (done) freeze();
+    });
+    layoutRef.current = layout;
+
+    // Any manual pan or zoom stops the view from following the layout.
+    const captor = sigma.getMouseCaptor();
+    captor.on("wheel", freeze);
+    sigma.getTouchCaptor().on("touchmove", freeze);
 
     // Drag nodes around; the layout follows, like in Obsidian.
     let dragged: string | null = null;
@@ -163,7 +209,8 @@ export default function GraphView({ graph, forces, display, selected, highlight,
       dragged = node;
       moved = false;
     });
-    sigma.getMouseCaptor().on("mousemovebody", (e) => {
+    captor.on("mousedown", () => !dragged && freeze());
+    captor.on("mousemovebody", (e) => {
       if (!dragged) return;
       moved = true;
       const pos = sigma.viewportToGraph(e);
@@ -176,8 +223,8 @@ export default function GraphView({ graph, forces, display, selected, highlight,
       if (dragged) layout.release(dragged);
       dragged = null;
     };
-    sigma.getMouseCaptor().on("mouseup", release);
-    sigma.getMouseCaptor().on("mouseleave", release);
+    captor.on("mouseup", release);
+    captor.on("mouseleave", release);
 
     sigma.on("clickNode", ({ node }) => {
       if (!moved) onSelectRef.current(node);
@@ -203,7 +250,9 @@ export default function GraphView({ graph, forces, display, selected, highlight,
   }, [graph]);
 
   useEffect(() => {
-    layoutRef.current?.apply(forces);
+    if (!layoutRef.current) return;
+    layoutRef.current.apply(forces);
+    setSettling(true);
   }, [forces]);
 
   useEffect(() => {
@@ -236,7 +285,11 @@ export default function GraphView({ graph, forces, display, selected, highlight,
   }, [selected, highlight, graph]);
 
   useImperativeHandle(handle, () => ({
-    animate: () => layoutRef.current?.reheat(1),
+    animate: () => {
+      layoutRef.current?.reheat(1);
+      setSettling(true);
+      refit();
+    },
     fit: () => refit(),
     exportPng: async (whole) => {
       const sigma = sigmaRef.current;
@@ -269,20 +322,24 @@ export default function GraphView({ graph, forces, display, selected, highlight,
   return (
     <div className="relative h-full w-full">
       <div ref={container} className="absolute inset-0" />
-      <div className="absolute bottom-4 left-4 flex flex-col overflow-hidden rounded-xl border border-white/10 bg-panel/90 backdrop-blur">
-        {[
-          ["+", 0.6, "Zoom in"],
-          ["−", 1.6, "Zoom out"],
-          ["⤢", null, "Fit to screen"],
-        ].map(([label, factor, title]) => (
+      <div className="glass absolute bottom-3 left-3 hidden flex-col overflow-hidden rounded-xl md:flex">
+        {(
+          [
+            ["Zoom in", 0.6, <path key="p" d="M12 6v12M6 12h12" />],
+            ["Zoom out", 1.6, <path key="p" d="M6 12h12" />],
+            ["Fit to screen", null, <path key="p" d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />],
+          ] as const
+        ).map(([title, factor, icon]) => (
           <button
-            key={title as string}
-            title={title as string}
-            aria-label={title as string}
-            onClick={() => zoom(factor as number | null)}
-            className="h-9 w-9 text-lg text-zinc-300 transition hover:bg-white/10 hover:text-white"
+            key={title}
+            title={title}
+            aria-label={title}
+            onClick={() => zoom(factor)}
+            className="grid h-9 w-9 place-items-center text-zinc-400 transition hover:bg-white/10 hover:text-white"
           >
-            {label}
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              {icon}
+            </svg>
           </button>
         ))}
       </div>

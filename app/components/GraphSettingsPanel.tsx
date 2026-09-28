@@ -5,12 +5,12 @@ import { clusterColor } from "@/lib/graph";
 import { DEFAULT_SETTINGS, MAX_NODES, type GraphSettings } from "@/lib/settings";
 import { Button, Collapsible, Segmented, Slider, Toggle } from "./controls";
 
-const MODES: { id: GraphMode; label: string }[] = [
-  { id: "playlists", label: "Playlists" },
-  { id: "artists", label: "Artists" },
-  { id: "songs", label: "Songs" },
-  { id: "genres", label: "Genres" },
-];
+const MODE_LABEL: Record<GraphMode, string> = {
+  playlists: "Playlists",
+  artists: "Artists",
+  songs: "Songs",
+  genres: "Genres",
+};
 
 const CLUSTER_BY: { id: ClusterBy; label: string; title: string }[] = [
   { id: "smart", label: "Smart", title: "Similar taste: rare shared artists and niche genres weigh most" },
@@ -20,9 +20,9 @@ const CLUSTER_BY: { id: ClusterBy; label: string; title: string }[] = [
 ];
 
 const PRESETS: { label: string; values: Partial<GraphSettings> }[] = [
-  { label: "Tight", values: { centerForce: 0.6, repelForce: 4, linkForce: 0.8, linkDistance: 60, clusterForce: 0.3 } },
-  { label: "Spread out", values: { centerForce: 0.1, repelForce: 16, linkForce: 0.4, linkDistance: 260, clusterForce: 0.2 } },
-  { label: "Islands", values: { centerForce: 0.05, repelForce: 10, linkForce: 0.7, linkDistance: 140, clusterForce: 0.9 } },
+  { label: "Tight", values: { centerForce: 0.5, repelForce: 5, linkForce: 0.7, linkDistance: 60, clusterForce: 0.2 } },
+  { label: "Spread out", values: { centerForce: 0.05, repelForce: 14, linkForce: 0.4, linkDistance: 150, clusterForce: 0.5 } },
+  { label: "Islands", values: { centerForce: 0.15, repelForce: 8, linkForce: 0.5, linkDistance: 90, clusterForce: 0.9 } },
 ];
 
 interface Props {
@@ -67,13 +67,13 @@ export default function GraphSettingsPanel({
 
   return (
     <div className="text-sm">
-      <div className="flex items-center justify-between border-b border-line px-4 py-2 text-xs text-zinc-500">
-        <span>
-          {nodeCount} nodes · {edgeCount} links
+      <div className="flex items-center justify-between border-b border-line px-4 py-2.5 text-xs text-zinc-500">
+        <span className="tabular-nums">
+          {nodeCount.toLocaleString()} nodes · {edgeCount.toLocaleString()} links
           {status && <span className="ml-2 text-zinc-400">{status}</span>}
         </span>
         <button
-          onClick={() => update({ ...DEFAULT_SETTINGS, mode: s.mode, clusterBy: s.clusterBy })}
+          onClick={() => update(DEFAULT_SETTINGS)}
           className="hover:text-white"
           title="Reset all settings"
         >
@@ -81,8 +81,7 @@ export default function GraphSettingsPanel({
         </button>
       </div>
 
-      <Collapsible title="View">
-        <Segmented full options={MODES} value={s.mode} onChange={(mode) => update({ mode })} />
+      <Collapsible title={MODE_LABEL[s.mode]}>
         {s.mode === "playlists" && (
           <>
             <Slider
@@ -255,6 +254,7 @@ export default function GraphSettingsPanel({
           step={0.01}
           onChange={(linkThickness) => update({ linkThickness })}
         />
+        <Toggle label="Colour links by cluster" value={s.tintLinks} onChange={(tintLinks) => update({ tintLinks })} />
       </Collapsible>
 
       <Collapsible
@@ -270,7 +270,7 @@ export default function GraphSettingsPanel({
             <button
               key={p.label}
               onClick={() => update(p.values)}
-              className="flex-1 rounded-md border border-line px-2 py-1 text-xs text-zinc-400 hover:bg-white/5 hover:text-white"
+              className="flex-1 rounded-md border border-line px-2 py-1.5 text-xs text-zinc-400 transition hover:border-white/15 hover:bg-white/5 hover:text-white"
             >
               {p.label}
             </button>
