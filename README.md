@@ -8,19 +8,35 @@ songs tie them together, and where you've added the same song twice.
 Live: [spotify-playlist-graph.vercel.app](https://spotify-playlist-graph.vercel.app) ·
 no Spotify account needed for the demo (`/?demo`).
 
+![Galaxy: every song, in islands of taste](docs/screenshots/2-galaxy.png)
+
 ## Features
 
-- **Playlist map**: playlists are linked by shared songs and artists and
-  grouped into clusters, coloured either by overlap or by dominant genre.
-- **Artists / Songs / Genres views**: see which artists, tracks and genres
-  bridge your playlists.
-- **Density control** from sparse to dense for every view.
-- **Details panel**: closest playlists with the exact songs they share, top
+- **Every song at once**: the Songs view shows your whole library by default,
+  thousands of nodes laid out live in a web worker so the page stays responsive.
+- **Looks**: one-click starting points that set view, clustering, forces and
+  display together: Taste islands, Galaxy, Continent, Bridges, Artist web,
+  Genre sky and Constellation.
+- **Islands that hold up at scale**: clusters get their own packed area sized
+  to how many nodes they have, links between clusters give way as cluster pull
+  rises, and repulsion only acts locally, so the same settings look the same
+  for 50 nodes or 5,000.
+- **Playlist, Artist, Song and Genre views**, switched from the top bar, with
+  smart (taste), overlap, artist or genre clusters.
+- **Insights panel**: closest playlists with the exact songs they share, top
   artists, how much of a playlist is unique, duplicates and alternate versions.
-- **Search** across playlists, artists and songs.
+- **Search** across playlists, artists and songs (press <kbd>/</kbd>), and
+  Obsidian-style filters (`genre:"indie" -artist:drake`).
+- **Export** as PNG, CSV (zip) or JSON; open a JSON export again without Spotify,
+  straight from the landing page.
 - **Fast reloads**: playlists are cached in IndexedDB and only re-fetched when
   Spotify reports a change (snapshot id).
 - **Demo mode** with generated data.
+
+| | |
+|---|---|
+| ![Landing page](docs/screenshots/1-landing.png) | ![Taste islands](docs/screenshots/3-taste-islands.png) |
+| ![Artist web with insights](docs/screenshots/4-artist-web.png) | ![Continent](docs/screenshots/5-continent.png) |
 
 ## How it works
 
@@ -34,7 +50,8 @@ no Spotify account needed for the demo (`/?demo`).
   fast), otherwise from MusicBrainz (no key, about one artist per second).
   Results are cached in the browser for 30 days.
 - Graph rendering: [sigma.js](https://www.sigmajs.org/) (WebGL) + graphology
-  (ForceAtlas2 layout, Louvain clustering).
+  (Louvain clustering). The layout is d3-force running in a web worker
+  (`lib/layout.worker.ts`), with the scale-aware forces in `lib/forces.ts`.
 
 ## Development
 

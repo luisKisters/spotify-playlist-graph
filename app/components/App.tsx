@@ -146,17 +146,17 @@ export default function App() {
   const library = useMemo(() => analyze(playlists), [playlists]);
 
   if (phase.name === "checking") {
-    return <div className="grid h-full place-items-center text-zinc-500">Loading…</div>;
+    return <div className="grid h-full place-items-center text-sm text-zinc-600">Loading…</div>;
   }
   if (phase.name === "landing") {
-    return <Landing error={phase.error} onDemo={startDemo} />;
+    return <Landing error={phase.error} onDemo={startDemo} onOpen={openExport} />;
   }
   if (phase.name === "loading") {
     const pct = phase.total ? Math.round((phase.done / phase.total) * 100) : 0;
     return (
       <div className="grid h-full place-items-center px-6">
         <div className="w-full max-w-sm text-center">
-          <p className="text-lg font-semibold text-white">Reading your playlists</p>
+          <p className="font-display text-3xl tracking-tight text-white">Reading your playlists</p>
           <p className="mt-1 text-sm text-zinc-400">
             {phase.done} of {phase.total} playlists · only changed playlists are
             fetched next time

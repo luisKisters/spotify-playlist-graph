@@ -2,6 +2,9 @@ import Graph from "graphology";
 import louvain from "graphology-communities-louvain";
 import type { GenreProfile, Library } from "./analysis";
 import { MAX_NODES, type GraphSettings } from "./settings";
+import { seeded } from "./rand";
+
+export { seeded };
 
 export type GraphMode = "playlists" | "artists" | "songs" | "genres";
 export type ClusterBy = "smart" | "overlap" | "artists" | "genre";
@@ -212,6 +215,10 @@ export function buildGraph(
         weight: pair.score,
         size: 0.5 + pair.score * 6,
         color: overlay(0.1 + Math.min(pair.score, 0.5) * 0.8),
+        tint:
+          clusterOf(pair.a) === clusterOf(pair.b)
+            ? tint(clusterOf(pair.a), 0.25 + Math.min(pair.score, 0.5))
+            : overlay(0.04 + Math.min(pair.score, 0.5) * 0.25),
       });
     }
   }
@@ -238,6 +245,7 @@ export function buildGraph(
           weight: count,
           size: 0.3 + Math.log2(1 + count) * 0.4,
           color: overlay(0.1),
+          tint: linkTint(clusterOf(pid), c),
         });
       }
     }
@@ -260,7 +268,7 @@ export function buildGraph(
         zIndex: 1,
       });
       for (const pid of t.playlists) {
-        link(pid, t.track.id, { weight: 1, size: 0.4, color: overlay(0.1) });
+        link(pid, t.track.id, { weight: 1, size: 0.4, color: overlay(0.1), tint: linkTint(clusterOf(pid), c) });
       }
     }
   }
@@ -295,6 +303,7 @@ export function buildGraph(
           weight: share,
           size: 0.3 + share * 4,
           color: overlay(0.08 + share * 0.4),
+          tint: tint(clusterOf(pid), 0.15 + share * 0.6),
         });
       }
     }
@@ -302,6 +311,23 @@ export function buildGraph(
 
   return g;
 }
+
+/**
+ * A cluster colour at the given opacity, for tinted links. Sigma blends with
+ * premultiplied alpha, so the channels are premultiplied here too; otherwise
+ * thousands of faint links add up to solid white.
+ */
+export function tint(c: number, alpha: number) {
+  const n = parseInt(clusterColor(c).slice(1), 16);
+  const ch = (v: number) => Math.round(v * alpha);
+  return `rgba(${ch(n >> 16)},${ch((n >> 8) & 255)},${ch(n & 255)},${alpha})`;
+}
+
+/**
+ * Links inside a cluster take its colour; links that cross between clusters
+ * stay faint, since thousands of them would otherwise wash over the islands.
+ */
+const linkTint = (a: number, b: number) => (a === b ? tint(a, 0.35) : tint(a, 0.08));
 
 /** White at the given opacity over the canvas colour, as an opaque colour. */
 export function overlay(alpha: number) {
@@ -313,11 +339,4 @@ function fade(hex: string) {
   const n = parseInt(hex.slice(1), 16);
   const mix = (c: number) => Math.round(c * 0.55 + 0x2a * 0.45);
   return `rgb(${mix(n >> 16)},${mix((n >> 8) & 255)},${mix(n & 255)})`;
-}
-
-export function seeded(seed: number) {
-  return () => {
-    seed = (seed * 1664525 + 1013904223) % 4294967296;
-    return seed / 4294967296;
-  };
 }
